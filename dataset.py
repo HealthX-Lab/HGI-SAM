@@ -1,25 +1,83 @@
 import os
 from torch.utils.data import Dataset
 import torch
-from preprocessing import get_slice_image
 import random
-from tqdm import tqdm
-import csv
 import numpy as np
 import nibabel as nib
 import cv2
+import csv
+import pandas as pd
+from preprocessing import window_image
+from tqdm import tqdm
+from sklearn.model_selection import train_test_split
+import nibabel
+import pickle
+
+
+def rsna_3d_train_validation_split(root_dir: str, validation_size=0.05, random_state=42, override=False):
+    """
+       a method that splits the 3D nifti dataset into train and validation set based on the number of slices containing hemorrhage
+       we save the split into files for faster computation and further requirements
+    """
+    train_split_path, validation_split_path = root_dir + '\\' + 'train_split', root_dir + '\\' + 'validation_split'
+    if os.path.isfile(train_split_path) and os.path.isfile(validation_split_path) and not override:
+        with open(train_split_path, "rb") as tf, open(validation_split_path, "rb") as vf:
+            return pickle.load(tf), pickle.load(vf)
+
+    labels_dir = root_dir + r'\train_labels'
+    filenames, hemorrhages_counts = [], []
+    labels = os.listdir(labels_dir)
+    for label_filename in tqdm(labels):
+        file_path = labels_dir + '\\' + label_filename
+        df = pd.read_csv(file_path)
+        filenames.append(label_filename.removesuffix('.csv')), hemorrhages_counts.append(sum(df["any"]))
+
+    train_filenames, validation_filenames, train_counts, validation_counts = train_test_split(filenames, hemorrhages_counts, test_size=validation_size, random_state=random_state)
+    with open(train_split_path, "wb") as tf, open(validation_split_path, "wb") as vf:
+        pickle.dump(train_filenames, tf), pickle.dump(validation_filenames, vf)
+
+    return train_filenames, validation_filenames
+
+
+def _get_image_windows(image, windows: [(int, int)]):
+    # WINDOWS_CENTER_WIDTH = {
+    #     'brain': (40, 80),
+    #     'subdural': (80, 200),
+    #     'bone': (600, 2800),
+    #     'soft': (40, 380),
+    #
+    #     'brain2': (40, 120),
+    #     'bone2': (700, 3200),
+    #     'subdural2': (80, 280),
+    #
+    #     'brain3': (40, 100),
+    #     'subdural3': (80, 200),
+    #     'bone3': (400, 500),
+    window_images = []
+    for window in windows:
+        window_images.append(window_image(image, window))
+
+    return torch.stack(window_images)
+
+
+def _read_image(file_path: str):
+    assert file_path is not None, 'file path is needed'
+    assert os.path.isfile(file_path), 'wrong file path'
+
+    image = torch.tensor(nibabel.load(filename=file_path).get_fdata())
+    return image
 
 
 class RSNAICHDataset(Dataset):
-    def __init__(self, files, labels=None, transform=None, windows=None):
+    def __init__(self, root_dir, files, windows=None, transform=None):
         """
-        param root_dir (string): Directory with all samples. Path to RSNA train or test directories.
+        param files (list of string): list of paths to the nifti files.
         param transform (callable, optional): optional transform to be applied on a sample.
+        param window (list of tuple): a list of window_center and window_width
         """
-        if windows is None:
-            windows = ['brain', 'subdural', 'bone']
+        self.train_dir = root_dir + r'\stage_2_train'
+        self.labels_dir = root_dir + r'\train_labels'
         self.files = files
-        self.labels = labels
         self.transform = transform
         self.windows = windows
 
@@ -30,20 +88,19 @@ class RSNAICHDataset(Dataset):
         if torch.is_tensor(item):
             item = item.tolist()
 
-        sample_path = self.files[item]
+        image_path = self.train_dir + '\\' + self.files[item] + '.nii'
+        label_path = self.labels_dir + '\\' + self.files[item] + '.csv'
 
-        sample_img = get_slice_image(self.windows, file_path=sample_path)
+        print(image_path, label_path)
+        image = _read_image(image_path)
+        label = pd.read_csv(label_path)
 
-        if self.transform:
-            sample_img = self.transform(sample_img)
+        if self.windows is not None:
+            image = _get_image_windows(image, self.windows)
+        if self.transform is not None:
+            image = self.transform(image)
 
-        if self.labels is None:
-            return sample_img
-        else:
-            return sample_img, 0, self.labels[item]
-
-    def get_first_thousand_samples(self):
-        return torch.stack([self.__getitem__(i)[0] for i in range(1000)])
+        return image, label
 
 
 class PhysioNetICHDataset(Dataset):

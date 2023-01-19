@@ -40,19 +40,6 @@ def rsna_3d_train_validation_split(root_dir: str, validation_size=0.05, random_s
 
 
 def _get_image_windows(image, windows: [(int, int)]):
-    # WINDOWS_CENTER_WIDTH = {
-    #     'brain': (40, 80),
-    #     'subdural': (80, 200),
-    #     'bone': (600, 2800),
-    #     'soft': (40, 380),
-    #
-    #     'brain2': (40, 120),
-    #     'bone2': (700, 3200),
-    #     'subdural2': (80, 280),
-    #
-    #     'brain3': (40, 100),
-    #     'subdural3': (80, 200),
-    #     'bone3': (400, 500),
     window_images = []
     for window in windows:
         window_images.append(window_image(image, window))
@@ -91,7 +78,6 @@ class RSNAICHDataset(Dataset):
         image_path = self.train_dir + '\\' + self.files[item] + '.nii'
         label_path = self.labels_dir + '\\' + self.files[item] + '.csv'
 
-        print(image_path, label_path)
         image = _read_image(image_path)
         label = pd.read_csv(label_path)
 
@@ -102,7 +88,7 @@ class RSNAICHDataset(Dataset):
 
         return image, label
 
-
+#########################################################################################################################
 class PhysioNetICHDataset(Dataset):
     def __init__(self, src_dir, labels_state, with_masks_only=False, transform=None, windows=None):
         if windows is None:

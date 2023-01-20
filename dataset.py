@@ -1,11 +1,6 @@
 import os
 from torch.utils.data import Dataset
 import torch
-import random
-import numpy as np
-import nibabel as nib
-import cv2
-import csv
 import pandas as pd
 from preprocessing import window_image
 from tqdm import tqdm
@@ -51,11 +46,11 @@ def _read_image(file_path: str):
     assert file_path is not None, 'file path is needed'
     assert os.path.isfile(file_path), 'wrong file path'
 
-    image = torch.tensor(nibabel.load(filename=file_path).get_fdata())
+    image = torch.FloatTensor(nibabel.load(filename=file_path).get_fdata())
     return image
 
 
-class RSNAICHDataset(Dataset):
+class RSNAICHDataset3D(Dataset):
     def __init__(self, root_dir, files, windows=None, transform=None):
         """
         Specific pytorch dataset designed for RSNA ICH dataset
@@ -80,18 +75,21 @@ class RSNAICHDataset(Dataset):
         image_path = os.path.join(self.train_dir, self.files[item] + '.nii')
         label_path = os.path.join(self.labels_dir, self.files[item] + '.csv')
 
-        image = _read_image(image_path)
+        image = _read_image(image_path)  # x, y, z
         label = pd.read_csv(label_path)
+        label = torch.LongTensor(label["any"])
 
         if self.windows is not None:
-            image = _get_image_windows(image, self.windows)
+            image = _get_image_windows(image, self.windows)  # c, x, y, z
+
+        image = torch.movedim(image, image.dim() - 1, 0)
         if self.transform is not None:
             image = self.transform(image)
 
         return image, label
 
 
-class PhysioNetICHDataset(Dataset):
+class PhysioNetICHDataset3D(Dataset):
     def __init__(self, root_dir, windows=None, transform=None):
         """
         Specific pytorch dataset designed for PhysioNet ICH dataset
@@ -122,14 +120,18 @@ class PhysioNetICHDataset(Dataset):
 
         image = _read_image(image_path)
         mask = _read_image(mask_path)
+        label = self.labels[self.labels['PatientNumber'] == patient_number]
+        label = 1 - torch.LongTensor(label['No_Hemorrhage'])
 
         if self.windows is not None:
             image = _get_image_windows(image, self.windows)
         if mask.max() > 0:
             mask = (mask - mask.min()) / (mask.max() - mask.min())
 
+        image = torch.movedim(image, image.dim() - 1, 0)
+        mask = torch.movedim(image, mask.dim() - 1, 0)
         if self.transform is not None:
             image = self.transform(image)
-            mask = self.transform(mask.unsqueeze(0)).squeeze()
+            mask = self.transform(mask.unsqueeze(1)).squeeze()
 
-        return image, mask, self.labels[self.labels['PatientNumber'] == patient_number]
+        return image, mask, label

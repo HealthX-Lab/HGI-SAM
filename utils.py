@@ -31,8 +31,14 @@ class ConfusionMatrix:
     def add_loss(self, loss):
         self.losses.append(loss)
 
+    def get_mean_loss(self):
+        return sum(self.losses) / self.number_of_samples
+
     def add_dice(self, dice):
         self.dices.append(dice)
+
+    def get_mean_dice(self):
+        return sum(self.dices) / len(self.dices)
 
     def compute_confusion_matrix(self):
         self.predictions = torch.stack(self.predictions).to(self.device)
@@ -43,8 +49,6 @@ class ConfusionMatrix:
         self.true_negatives = torch.sum((1 - pred_out) * (1 - self.ground_truth), dim=0)
         self.false_positives = torch.sum(pred_out * (1 - self.ground_truth), dim=0)
         self.false_negatives = torch.sum((1 - pred_out) * self.ground_truth, dim=0)
-
-        self.losses = sum(self.losses) / self.number_of_samples
 
     def get_accuracy(self):
         numerator = self.true_positives + self.true_negatives

@@ -27,24 +27,6 @@ class _AddGaussianNoise(object):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 
-class Transform:
-    def __init__(self, img_size):
-        h, w = img_size
-        self.transform = transforms.Compose([
-            transforms.Resize((int(h * 1.1), int(w * 1.1))),
-            transforms.CenterCrop((h, w)),
-            # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
-
-    def update_transform(self, std_mean):
-        std, mean = std_mean
-        self.transform = transforms.Compose([self.transform,
-                                             transforms.Normalize(mean, std)])
-
-    def __call__(self):
-        return self.transform
-
-
 def get_augmentation():
     t = transforms.Compose([
         transforms.RandomHorizontalFlip(),

@@ -77,7 +77,7 @@ class RSNAICHDataset3D(Dataset):
 
         image = _read_image(image_path)  # x, y, z
         label = pd.read_csv(label_path)
-        label = torch.LongTensor(label["any"])
+        label = torch.FloatTensor(label["any"])
 
         if self.windows is not None:
             image = _get_image_windows(image, self.windows)  # c, x, y, z
@@ -121,7 +121,7 @@ class PhysioNetICHDataset3D(Dataset):
         image = _read_image(image_path)
         mask = _read_image(mask_path)
         label = self.labels[self.labels['PatientNumber'] == patient_number]
-        label = 1 - torch.LongTensor(label['No_Hemorrhage'])
+        label = 1 - torch.FloatTensor(label['No_Hemorrhage'])
 
         if self.windows is not None:
             image = _get_image_windows(image, self.windows)
@@ -135,3 +135,10 @@ class PhysioNetICHDataset3D(Dataset):
             mask = self.transform(mask.unsqueeze(1)).squeeze()
 
         return image, mask, label
+
+
+def rsna_collate_fn(batch):
+    data = torch.cat([item[0] for item in batch])
+    target = torch.cat([item[1] for item in batch])
+
+    return [data, target]

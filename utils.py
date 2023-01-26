@@ -113,8 +113,8 @@ class EarlyStopping:
         assert patience > 0, 'patience must be positive'
         self.model = model
         self.patience = patience
-        self.gamma = gamma
         self.path_to_save = path_to_save
+        self.gamma = gamma
 
         self.min_loss = np.Inf
         self.early_stop = False
@@ -127,7 +127,6 @@ class EarlyStopping:
             self.counter = 0
             save_model(self.model, self.path_to_save)
         else:
-            save_model(self.model, self.path_to_save + r'early.pt')
             self.counter += 1
             if self.counter == self.patience:
                 print('early stop')

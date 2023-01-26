@@ -2,16 +2,19 @@ from torchvision import transforms
 import torch
 
 
-def window_image(image, window_center_width, rescale=True):
-    img_min = window_center_width[0] - window_center_width[1] // 2
-    img_max = window_center_width[0] + window_center_width[1] // 2
+def window_image(image, window_params, rescale=True):
+    center, width, intercept, slope = window_params
+    img_min = center - width // 2
+    img_max = center + width // 2
+
+    image = slope * (image + intercept)
     image[image < img_min] = img_min
     image[image > img_max] = img_max
 
     if rescale and (image.max() - image.min()) > 0:
         image = (image - image.min()) / (image.max() - image.min())
 
-    return image
+    return torch.FloatTensor(image)
 
 
 class _AddGaussianNoise(object):

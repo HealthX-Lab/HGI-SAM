@@ -15,13 +15,16 @@ class ConfusionMatrix:
         self.ground_truth = []
 
         self.losses = []
-        self.dices = []
         self.number_of_samples = 0
 
         self.true_positives = None
         self.true_negatives = None
         self.false_positives = None
         self.false_negatives = None
+
+        self.dices = []
+        self.IoUs = []
+        self.hausdorff_distances = []
 
     def add_prediction(self, pred, gt):
         self.predictions.extend(list(pred))
@@ -40,8 +43,20 @@ class ConfusionMatrix:
     def add_dice(self, dice):
         self.dices.extend(list(dice))
 
+    def add_iou(self, iou):
+        self.IoUs.extend(list(iou))
+
+    def add_hausdorff_distance(self, hd):
+        self.hausdorff_distances.extend(list(hd))
+
     def get_mean_dice(self):
         return torch.nanmean(torch.tensor(self.dices))
+
+    def get_mean_iou(self):
+        return torch.nanmean(torch.tensor(self.IoUs))
+
+    def get_mean_hausdorff_distance(self):
+        return torch.nanmean(torch.tensor(self.hausdorff_distances))
 
     def compute_confusion_matrix(self):
         self.predictions = torch.stack(self.predictions).to(self.device)
@@ -197,8 +212,8 @@ def dice_metric(predicted_mask, gt_mask):
 
 
 def intersection_over_union(predicted_mask, gt_mask):
-    intersection = torch.count_nonzero(predicted_mask * gt_mask)
-    union = torch.count_nonzero(predicted_mask + gt_mask)
+    intersection = torch.count_nonzero((predicted_mask * gt_mask) > 0, dim=(1, 2))
+    union = torch.count_nonzero((predicted_mask + gt_mask) > 0, dim=(1, 2))
     return intersection / union
 
 

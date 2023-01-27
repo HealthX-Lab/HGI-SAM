@@ -6,6 +6,7 @@ import cv2
 import torch.nn.functional as F
 from sklearn import metrics
 from skimage.filters import threshold_otsu
+from monai.metrics.utils import get_mask_edges, get_surface_distance
 
 
 class ConfusionMatrix:
@@ -215,6 +216,26 @@ def intersection_over_union(predicted_mask, gt_mask):
     intersection = torch.count_nonzero((predicted_mask * gt_mask) > 0, dim=(1, 2))
     union = torch.count_nonzero((predicted_mask + gt_mask) > 0, dim=(1, 2))
     return intersection / union
+
+
+def hausdorff_distance(pred, gt):
+    max_dist = np.sqrt(gt.shape[1] ** 2 + gt.shape[2] ** 2)
+    distances = torch.zeros(gt.shape[0])
+    for image_index in range(gt.shape[0]):
+        if torch.all(torch.eq(pred[image_index], gt[image_index])):
+            distances[image_index] = 0.0
+            continue
+        (edges_pred, edges_gt) = get_mask_edges(pred[image_index], gt[image_index])
+        surface_distance = get_surface_distance(edges_pred, edges_gt, distance_metric="euclidean")
+        if surface_distance.shape == (0,):
+            distances[image_index] = 0.0
+            continue
+        dist = surface_distance.max()
+        if dist > max_dist:
+            distances[image_index] = 1.0
+            continue
+        distances[image_index] = dist / max_dist
+    return distances
 
 
 def binarization_simple_thresholding(image, threshold):

@@ -7,7 +7,7 @@ class UNet(nn.Module):
     def __init__(self, in_ch, num_classes, embed_dims=None):
         super().__init__()
         if embed_dims is None:
-            self.embed_dims = [32, 64, 128, 256, 512, 1024]
+            self.embed_dims = [128, 256, 512, 1024, 2048]
         else:
             self.embed_dims = embed_dims
         self.num_classes = num_classes

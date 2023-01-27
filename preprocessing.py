@@ -19,19 +19,6 @@ def window_image(image, window_params, rescale=True):
     return torch.FloatTensor(image)
 
 
-class _AddGaussianNoise(object):
-    def __init__(self, mean=0., std=1., device='cuda'):
-        self.std = std
-        self.mean = mean
-        self.device = device
-
-    def __call__(self, tensor):
-        return tensor + torch.randn(tensor.size(), device=self.device) * self.std + self.mean
-
-    def __repr__(self):
-        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
-
-
 def get_transform(image_size):
     t = transforms.Compose([
         transforms.Resize(int(1.2 * image_size)),
@@ -42,12 +29,13 @@ def get_transform(image_size):
 
 
 class Augmentation:
-    def __init__(self):
+    def __init__(self, device='cuda'):
         self.augmentation = transforms.Compose([
             transforms.RandomHorizontalFlip(),
-            transforms.RandomAffine(2, translate=(0.1, 0.1)),
+            transforms.RandomAffine(0, translate=(0.1, 0.1), scale=(0.9, 0.9)),
             transforms.RandomRotation(45),
-            transforms.RandomApply([_AddGaussianNoise(0., 0.09)])
+            transforms.ColorJitter(0.1, 0.1),
+            transforms.GaussianBlur(3, sigma=(0.1, 1))
         ])
 
     def __call__(self, image, mask=None):

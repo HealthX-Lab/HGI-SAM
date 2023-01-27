@@ -23,7 +23,7 @@ class UNet(nn.Module):
         self.embed_dims.reverse()
         decoder = OrderedDict()
         for i in range(len(self.embed_dims) - 1):
-            decoder[f'up-{i + 1}'] = nn.ConvTranspose2d(in_channels=self.embed_dims[i], out_channels=self.embed_dims[i + 1], kernel_size=3, padding=1, output_padding=1)
+            decoder[f'up-{i + 1}'] = nn.ConvTranspose2d(in_channels=self.embed_dims[i], out_channels=self.embed_dims[i + 1], kernel_size=3, stride=2, padding=1, output_padding=1)
             decoder[f'expansive-{i + 1}'] = ConvBlock(in_ch=self.embed_dims[i], out_ch=self.embed_dims[i + 1], kernel_size=3)
         self.decoder = nn.ModuleDict(decoder)
 
@@ -34,10 +34,11 @@ class UNet(nn.Module):
         for i in range(len(self.embed_dims) - 1):
             x = self.encoder[f'contracting-{i + 1}'](x)
             residuals.append(x)
-            x = self.encoder[f'pool-{i + 1}']
+            x = self.encoder[f'pool-{i + 1}'](x)
 
         x = self.bottle_neck(x)
 
+        residuals.reverse()
         for i in range(len(self.embed_dims) - 1):
             x = self.decoder[f'up-{i + 1}'](x)
             x = self.decoder[f'expansive-{i + 1}'](torch.cat((x, residuals[i]), dim=1))

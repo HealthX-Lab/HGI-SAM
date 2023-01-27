@@ -226,12 +226,14 @@ class PhysioNetICHDataset2D(Dataset):
         with open(self.labels_path, newline='') as labels_csv:
             reader = csv.DictReader(labels_csv)
             for row in reader:
-                label = torch.zeros(len(SUBTYPES))
+                label = np.zeros(len(SUBTYPES))
                 for i, subtype in enumerate(SUBTYPES):
                     label[i] = float(row[subtype])
                 label[-1] = 1 - label[-1]  # Any hemorrhage = 1 - No Hemorrhage
 
                 self.labels.append(label)
+        self.labels = np.array(self.labels)
+
         k = 0
         pbar = tqdm(self.filenames, total=len(self.filenames))
         pbar.set_description("reading physionet dataset")
@@ -261,7 +263,7 @@ class PhysioNetICHDataset2D(Dataset):
         if mask.max() > 0:  # change to range to 0-1
             mask = (mask - mask.min()) / (mask.max() - mask.min())
 
-        default_window = _get_image_windows(image, [(40, 80, 0, 1)])
+        default_window = _get_image_windows(image, [(40, 120, 0, 1)])
         if self.windows is not None:
             image = torch.cat([default_window, _get_image_windows(image, self.windows)])
         else:
@@ -316,14 +318,29 @@ class PhysioNetICHDataset3D(Dataset):
         image = torch.movedim(image, image.dim() - 1, 0)
         mask = torch.movedim(image, mask.dim() - 1, 0)
         if self.transform is not None:
-            image = self.transform(image)
-            mask = self.transform(mask.unsqueeze(1)).squeeze()
+            transformed = self.transform(image=image, mask=mask)
+            image = transformed["image"]
+            mask = transformed["mask"]
 
         return image, mask, label
 
 
-def rsna_collate_fn(batch):
+def rsna_3d_collate_fn(batch):
     data = torch.cat([item[0] for item in batch])
     target = torch.cat([item[1] for item in batch])
+
+    return [data, target]
+
+
+def physio_collate_image_mask(batch):
+    data = torch.stack([item[0] for item in batch])
+    mask = torch.stack([item[1] for item in batch])
+
+    return [data, mask]
+
+
+def physio_collate_image_label(batch):
+    data = torch.stack([item[0] for item in batch])
+    target = torch.stack([item[2] for item in batch])
 
     return [data, target]

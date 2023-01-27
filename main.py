@@ -1,6 +1,7 @@
 import nibabel
 import os
 import cv2
+import numpy as np
 from tqdm import tqdm
 from dataset import *
 from torchvision import transforms
@@ -9,55 +10,70 @@ import torch.nn as nn
 from train import *
 import torch
 from preprocessing import *
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 import timm
 from collections import Counter
+from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.preprocessing import LabelEncoder
+from models.unet import *
+import torch.optim as optim
+from utils import *
+import statistics
 
 
 def main():
-    # print(timm.list_models('*swin*'))
-    # src = r'C:\rsna-ich-nifty'
-    # train_files, validation_files = rsna_3d_train_validation_split(src, override=False)
-    # img_size = 224
-    # transform = transforms.Compose([
-    #     transforms.Resize(int(img_size * 1.2)),
-    #     transforms.CenterCrop(img_size),
-    # ])
-    # train_ds = RSNAICHDataset3D(src, train_files[14125:], windows=[(40, 80)], transform=transform)
-    # train_dl = DataLoader(train_ds, batch_size=1, collate_fn=rsna_collate_fn, shuffle=False)
-    # validation_ds = RSNAICHDataset3D(src, validation_files, windows=[(40, 80)], transform=transform)
-    # validation_dl = DataLoader(validation_ds, batch_size=1, collate_fn=rsna_collate_fn)
-    # model = timm.create_model('swin_base_patch4_window7_224', in_chans=1, num_classes=1)
-    # opt = torch.optim.Adam(model.parameters())
-    # early_stopping = EarlyStopping(model, patience=3, path_to_save='model.pth')
-    # cfm = None
-    # while not early_stopping.early_stop:
-    #     cfm = train_one_epoch(model, opt, FocalBCELoss(), train_dl, validation_dl)
-    #     early_stopping(cfm["valid_cfm"].get_mean_loss())
-    # print('loss: ', cfm["train_cfm"].get_mean_loss(), cfm["valid_cfm"].get_mean_loss())
-    # print('F1-score: ', cfm["train_cfm"].get_f1_score(), cfm["valid_cfm"].get_f1_score())
-    # print('Accuracy: ', cfm["train_cfm"].get_accuracy(), cfm["valid_cfm"].get_accuracy())
-    # print('Specificity: ', cfm["train_cfm"].get_specificity(), cfm["valid_cfm"].get_specificity())
-    # print('Precision: ', cfm["train_cfm"].get_precision(), cfm["valid_cfm"].get_precision())
-    # print('Recall: ', cfm["train_cfm"].get_recall_sensitivity(), cfm["valid_cfm"].get_recall_sensitivity())
-    # print('AUC: ', cfm["train_cfm"].get_auc_score(), cfm["valid_cfm"].get_auc_score())
-    # x, y, vx, vy = rsna_2d_train_validation_split(r'D:\Datasets\rsna-ich')
-    # ds = RSNAICHDataset2D(r'D:\Datasets\rsna-ich', x, y, windows=[(80, 200, -1024, 1)])
-    #
-    # for a, b in ds:
-    #     print(a.shape)
-    #     cv2.imshow('a', a.numpy()[0, :, :])
-    #     cv2.imshow('b', a.numpy()[1, :, :])
-    #     print(b)
-    #     cv2.waitKey()
-    ds = PhysioNetICHDataset2D(r'C:\physio-ich')
-    for i, m, l in ds:
-        print(i.shape)
-        cv2.imshow('i', i.numpy()[0, :, :])
-        print(m.shape)
-        cv2.imshow('m', m.numpy())
-        print(l)
-        cv2.waitKey()
+    train_and_test_physionet()
+
+
+def train_and_test_physionet():
+    k = 10
+    save_name = 'unet-all'
+    transform = get_transform(384)
+    augmentation = Augmentation()
+
+    ds = PhysioNetICHDataset2D(r'C:\physio-ich', transform=transform)
+
+    indices = np.arange(0, len(ds.labels))
+    encoded_labels = LabelEncoder().fit_transform([''.join(str(l)) for l in ds.labels])
+    skf = StratifiedKFold(k)
+    test_cfm_matrices = []
+    for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):  # dividing intro train/test based on all subtypes
+        # dividing into train/valid based on any hemorrhage
+        train_indices, valid_indices = train_test_split(train_valid_indices, stratify=ds.labels[train_valid_indices, -1], test_size=1. / (k - 1), random_state=42)
+
+        train_ds = Subset(ds, train_indices)
+        valid_ds = Subset(ds, valid_indices)
+        test_ds = Subset(ds, test_indices)
+
+        train_loader = DataLoader(train_ds, batch_size=16, shuffle=True, collate_fn=physio_collate_image_mask)
+        valid_loader = DataLoader(valid_ds, batch_size=16, collate_fn=physio_collate_image_mask)
+        test_loader = DataLoader(test_ds, batch_size=16, collate_fn=physio_collate_image_mask)
+
+        model = UNet(1, 1)
+        optimizer = optim.Adam(model.parameters(), lr=1e-4)
+        loss_fn = DiceLoss()
+        early_stopping = EarlyStopping(model, 3, f'{save_name}-fold{cf}.pth')
+        while not early_stopping.early_stop:
+            m = train_one_epoch_segmentation(model, optimizer, loss_fn, train_loader, valid_loader, augmentation=augmentation)
+            early_stopping(m['valid_cfm'].get_mean_loss())
+
+        load_model(model, f'{save_name}-fold{cf}.pth')
+        test_cfm = ConfusionMatrix()
+        with torch.no_grad():
+            for image, label in test_loader:
+                image, label = image.to('cuda'), label.to('cuda')
+                # if not label.any():
+                #     continue
+                pred_mask = torch.round(torch.sigmoid(model(image)))
+                test_cfm.add_dice(dice_metric(pred_mask.squeeze(1), label))
+        test_cfm_matrices.append(test_cfm)
+        print(f'fold {cf+1} dice:', test_cfm.get_mean_dice())
+
+    dices = []
+    for i in range(k):
+        dices.append(test_cfm_matrices[i].get_mean_dice().item())
+
+    print('dice: ', statistics.mean(dices), ' +/- ', statistics.stdev(dices))
 
 
 if __name__ == '__main__':

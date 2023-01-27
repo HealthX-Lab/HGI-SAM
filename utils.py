@@ -26,7 +26,10 @@ class ConfusionMatrix:
     def add_prediction(self, pred, gt):
         self.predictions.extend(list(pred))
         self.ground_truth.extend(list(gt))
-        self.number_of_samples += len(gt)
+        self.add_number_of_samples(len(gt))
+
+    def add_number_of_samples(self, new_samples):
+        self.number_of_samples += new_samples
 
     def add_loss(self, loss):
         self.losses.append(loss)
@@ -35,10 +38,10 @@ class ConfusionMatrix:
         return sum(self.losses) / self.number_of_samples
 
     def add_dice(self, dice):
-        self.dices.append(dice)
+        self.dices.extend(list(dice))
 
     def get_mean_dice(self):
-        return sum(self.dices) / len(self.dices)
+        return torch.nanmean(torch.tensor(self.dices))
 
     def compute_confusion_matrix(self):
         self.predictions = torch.stack(self.predictions).to(self.device)
@@ -108,6 +111,42 @@ class FocalBCELoss:
         return reduced_bce
 
 
+class DiceLoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(DiceLoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1):
+        inputs = torch.sigmoid(inputs)
+
+        # flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+
+        intersection = (inputs * targets).sum()
+        dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+
+        return 1 - dice
+
+
+class DiceBCELoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(DiceBCELoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1):
+        inputs = torch.sigmoid(inputs)
+
+        # flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+
+        intersection = (inputs * targets).sum()
+        dice_loss = 1 - (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+        BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
+        Dice_BCE = BCE + dice_loss
+
+        return Dice_BCE
+
+
 class EarlyStopping:
     def __init__(self, model: nn.Module, patience: int, path_to_save: str, gamma=0):
         assert patience > 0, 'patience must be positive'
@@ -151,13 +190,10 @@ def plot_diagram(*metrics):
 
 
 def dice_metric(predicted_mask, gt_mask):
-    p = torch.count_nonzero(predicted_mask > 0)
-    gt = torch.count_nonzero(gt_mask > 0)
-    if p + gt == 0:
-        return torch.tensor([1])
-    else:
-        overlap = torch.count_nonzero((predicted_mask * gt_mask) > 0)
-        return 2 * overlap / (p + gt)
+    p = torch.count_nonzero(predicted_mask > 0, dim=(1, 2))
+    gt = torch.count_nonzero(gt_mask > 0, dim=(1, 2))
+    overlap = torch.count_nonzero((predicted_mask * gt_mask) > 0, dim=(1, 2))
+    return 2 * overlap / (p + gt)
 
 
 def intersection_over_union(predicted_mask, gt_mask):

@@ -184,10 +184,10 @@ class EarlyStopping:
         else:
             self.counter += 1
             if self.counter == self.patience:
-                print('early stop')
+                print("early stop")
                 self.early_stop = True
             else:
-                print('early stopping counter: {} of {}'.format(self.counter, self.patience))
+                print("early stopping counter: {} of {}".format(self.counter, self.patience))
 
 
 def save_model(model: nn.Module, path: str):
@@ -239,16 +239,21 @@ def hausdorff_distance(pred, gt):
 
 
 def binarization_simple_thresholding(image, threshold):
-    t = threshold * image.max()
-    image[image < t] = 0
-    image[image >= t] = 1
+    image[image < threshold] = 0
+    image[image >= threshold] = 1
+    return image
 
 
 def binarization_otsu(image):
-    blured_image = cv2.GaussianBlur(image.cpu().numpy(), (33, 33), cv2.BORDER_DEFAULT)
-    uint_image = (blured_image * 256).astype("uint8")
+    binarized_image = torch.zeros_like(image)
+    for index in range(binarized_image.shape[0]):
+        im = image[index]
+        blured_image = cv2.GaussianBlur(im.cpu().numpy(), (33, 33), cv2.BORDER_DEFAULT)
+        uint_image = (blured_image * 256).astype("uint8")
 
-    t = threshold_otsu(uint_image, 256)
-    image[uint_image < t] = 0
-    image[uint_image >= t] = 1
-    return image
+        t = threshold_otsu(uint_image, 256)
+        im[uint_image < t] = 0
+        im[uint_image >= t] = 1
+
+        binarized_image[index] = im
+    return binarized_image

@@ -91,6 +91,6 @@ def train_one_epoch_segmentation(model: torch.nn.Module, optimizer: torch.optim.
             _metrics["valid_cfm"].add_number_of_samples(len(label))
             _metrics["valid_cfm"].add_dice(dice_metric(pred_mask, label))
             _metrics["valid_cfm"].add_iou(intersection_over_union(pred_mask, label))
-            _metrics["train_cfm"].add_hausdorff_distance(hausdorff_distance(pred_mask, label))
+            _metrics["valid_cfm"].add_hausdorff_distance(hausdorff_distance(pred_mask, label))
 
     return _metrics

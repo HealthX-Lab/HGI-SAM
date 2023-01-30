@@ -109,26 +109,28 @@ class ConfusionMatrix:
         return np.array(scores)
 
 
-class FocalBCELoss:
-    def __init__(self, gamma=2, reduction='sum'):
+class FocalBCELoss(nn.Module):
+    def __init__(self, gamma=2, alpha=0.5, reduction='mean'):
+        super().__init__()
         self.gamma = gamma
+        self.alpha = alpha
         self.reduction = reduction
 
-    def __call__(self, pred, gt):
+    def forward(self, pred, gt):
         sigmoid = torch.sigmoid(pred)
-        bce = -(gt * ((1 - sigmoid) ** self.gamma) * torch.log(sigmoid) +
-                (1 - gt) * (sigmoid ** self.gamma) * torch.log(1 - sigmoid))
+        bce = -self.alpha * (gt * ((1 - sigmoid) ** self.gamma) * torch.log(sigmoid) +
+                             (1 - self.alpha) * (1 - gt) * (sigmoid ** self.gamma) * torch.log(1 - sigmoid))
 
         if self.reduction == 'sum':
-            reduced_bce = bce.sum(dim=0)
+            reduced_bce = bce.sum()
         else:
-            reduced_bce = bce.mean(dim=0)
+            reduced_bce = bce.mean()
 
         return reduced_bce
 
 
 class DiceLoss(nn.Module):
-    def __init__(self, weight=None, size_average=True):
+    def __init__(self):
         super(DiceLoss, self).__init__()
 
     def forward(self, inputs, targets, smooth=1):
@@ -145,22 +147,31 @@ class DiceLoss(nn.Module):
 
 
 class DiceBCELoss(nn.Module):
-    def __init__(self, weight=None, size_average=True):
+    def __init__(self):
         super(DiceBCELoss, self).__init__()
+        self.dice = DiceLoss()
 
     def forward(self, inputs, targets, smooth=1):
-        inputs = torch.sigmoid(inputs)
-
-        # flatten label and prediction tensors
-        inputs = inputs.view(-1)
-        targets = targets.view(-1)
-
-        intersection = (inputs * targets).sum()
-        dice_loss = 1 - (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+        dice_loss = self.dice(inputs, targets, smooth)
         BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
         Dice_BCE = BCE + dice_loss
 
         return Dice_BCE
+
+
+class DiceFocalBCELoss(nn.Module):
+    def __init__(self, gamma=2, alpha=0.5, reduction='mean'):
+        super().__init__()
+        self.dice = DiceLoss()
+        self.focal_bce = FocalBCELoss(gamma, alpha, reduction)
+
+    def forward(self, inputs, targets, smooth=1):
+        dice_loss = self.dice(inputs, targets, smooth)
+        BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
+        focal_BCE = self.focal_bce(inputs, targets)
+        Dice_Focal_BCE = BCE + dice_loss + focal_BCE
+
+        return Dice_Focal_BCE
 
 
 class EarlyStopping:

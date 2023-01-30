@@ -17,6 +17,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.preprocessing import LabelEncoder
 from models.unet import *
 from models.swin_unetr import *
+from models.swin_weak import *
 import torch.optim as optim
 from utils import *
 import statistics
@@ -24,6 +25,10 @@ import statistics
 
 def main():
     train_and_test_physionet()
+    # m = SwinWeak(1, 1)
+    # x = torch.randn(8, 1, 384, 384)
+    # y = m(x)
+    # print(y.shape)
 
 
 def train_and_test_physionet():
@@ -57,10 +62,11 @@ def train_and_test_physionet():
         # loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
         # loss_fn = DiceBCELoss()
         # loss_fn = DiceLoss()
-        loss_fn = FocalBCELoss()
+        loss_fn = DiceFocalBCELoss()
         early_stopping = EarlyStopping(model, 3, f'{checkpoint_name}-fold{cf}.pth')
         while not early_stopping.early_stop:
             m = train_one_epoch_segmentation(model, optimizer, loss_fn, train_loader, valid_loader, augmentation=augmentation, device=device)
+            print('\nvalid dice:', m['valid_cfm'].get_mean_dice(), ' IoU:', m['valid_cfm'].get_mean_iou(), ' Hausdorff:', m['valid_cfm'].get_mean_hausdorff_distance())
             early_stopping(m['valid_cfm'].get_mean_loss())
 
         load_model(model, f'{checkpoint_name}-fold{cf}.pth')

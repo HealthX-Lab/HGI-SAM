@@ -65,11 +65,13 @@ def train_one_epoch_segmentation(model: torch.nn.Module, optimizer: torch.optim.
 
         loss.backward()
         optimizer.step()
+        pred_mask = torch.round(torch.sigmoid(pred.squeeze(1)))
 
         _metrics["train_cfm"].add_loss(loss.item())
         _metrics["train_cfm"].add_number_of_samples(len(label))
-        # _metrics["train_cfm"].add_dice(dice_metric(torch.round(torch.sigmoid(pred.squeeze(1))), label))
-        # _metrics["train_cfm"].add_iou(intersection_over_union(torch.round(torch.sigmoid(pred.squeeze(1))), label))
+        _metrics["train_cfm"].add_dice(dice_metric(pred_mask, label))
+        _metrics["train_cfm"].add_iou(intersection_over_union(pred_mask, label))
+        _metrics["train_cfm"].add_hausdorff_distance(hausdorff_distance(pred_mask, label))
 
     model.eval()
     pbar_valid = tqdm(enumerate(valid_loader), total=len(valid_loader), leave=False)
@@ -83,10 +85,12 @@ def train_one_epoch_segmentation(model: torch.nn.Module, optimizer: torch.optim.
 
             pred = model(sample)
             loss = loss_fn(pred.squeeze(1), label)
+            pred_mask = torch.round(torch.sigmoid(pred.squeeze(1)))
 
             _metrics["valid_cfm"].add_loss(loss.item())
             _metrics["valid_cfm"].add_number_of_samples(len(label))
-            # _metrics["valid_cfm"].add_dice(dice_metric(torch.round(torch.sigmoid(pred.squeeze(1))), label))
-            # _metrics["valid_cfm"].add_iou(intersection_over_union(torch.round(torch.sigmoid(pred.squeeze(1))), label))
+            _metrics["valid_cfm"].add_dice(dice_metric(pred_mask, label))
+            _metrics["valid_cfm"].add_iou(intersection_over_union(pred_mask, label))
+            _metrics["train_cfm"].add_hausdorff_distance(hausdorff_distance(pred_mask, label))
 
     return _metrics

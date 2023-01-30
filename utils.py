@@ -116,17 +116,21 @@ class FocalBCELoss(nn.Module):
         self.alpha = alpha
         self.reduction = reduction
 
-    def forward(self, pred, gt):
-        sigmoid = torch.sigmoid(pred)
-        bce = -self.alpha * (gt * ((1 - sigmoid) ** self.gamma) * torch.log(sigmoid) +
-                             (1 - self.alpha) * (1 - gt) * (sigmoid ** self.gamma) * torch.log(1 - sigmoid))
+    def forward(self, inputs, targets):
+        p = torch.sigmoid(inputs)
+        ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
+
+        p_t = p * targets + (1 - p) * (1 - targets)
+        alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
+
+        loss = alpha_t * ce_loss * ((1 - p_t) ** self.gamma)
 
         if self.reduction == 'sum':
-            reduced_bce = bce.sum()
+            loss = loss.sum()
         else:
-            reduced_bce = bce.mean()
+            loss = loss.mean()
 
-        return reduced_bce
+        return loss
 
 
 class DiceLoss(nn.Module):
@@ -153,7 +157,7 @@ class DiceBCELoss(nn.Module):
 
     def forward(self, inputs, targets, smooth=1):
         dice_loss = self.dice(inputs, targets, smooth)
-        BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
+        BCE = F.binary_cross_entropy_with_logits(inputs, targets, reduction='mean')
         Dice_BCE = BCE + dice_loss
 
         return Dice_BCE
@@ -167,7 +171,7 @@ class DiceFocalBCELoss(nn.Module):
 
     def forward(self, inputs, targets, smooth=1):
         dice_loss = self.dice(inputs, targets, smooth)
-        BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
+        BCE = F.binary_cross_entropy_with_logits(inputs, targets, reduction='mean')
         focal_BCE = self.focal_bce(inputs, targets)
         Dice_Focal_BCE = BCE + dice_loss + focal_BCE
 

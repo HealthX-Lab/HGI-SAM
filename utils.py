@@ -109,7 +109,7 @@ class ConfusionMatrix:
         return np.array(scores)
 
 
-class FocalBCELoss(nn.Module):
+class FocalLoss(nn.Module):
     def __init__(self, gamma=2, alpha=0.5, reduction='mean'):
         super().__init__()
         self.gamma = gamma
@@ -167,7 +167,7 @@ class DiceFocalBCELoss(nn.Module):
     def __init__(self, gamma=2, alpha=0.5, reduction='mean'):
         super().__init__()
         self.dice = DiceLoss()
-        self.focal_bce = FocalBCELoss(gamma, alpha, reduction)
+        self.focal_bce = FocalLoss(gamma, alpha, reduction)
 
     def forward(self, inputs, targets, smooth=1):
         dice_loss = self.dice(inputs, targets, smooth)

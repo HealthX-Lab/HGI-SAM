@@ -12,24 +12,27 @@ from pytorch_grad_cam import GradCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XG
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from models.unet import ConvBlock
+from torchvision.transforms import GaussianBlur
+from collections import OrderedDict
 
 
 class SwinWeak(nn.Module):
-    def __init__(self, num_classes, in_ch):
+    def __init__(self, in_ch, num_classes):
         super().__init__()
-        self.swin_encoder = timm.models.swin_base_patch4_window12_384(in_chans=in_ch)
+        self.swin_encoder = timm.models.swin_base_patch4_window12_384(in_chans=in_ch, num_classes=-1)
 
-        self.attentions = {}
+        self.attentions = OrderedDict()
         for ln, layer in enumerate(self.swin_encoder.layers):
             for bn, block in enumerate(layer.blocks):
                 block.attn.softmax.register_forward_hook(get_attentions(self.attentions, f'{ln}_{bn}'))
 
-        self.features_layer_norm = nn.LayerNorm(1024)
         self.head = Head(1024, num_classes)
+
+        self.gaussian_blur = GaussianBlur(9, 1)
+        self.softmax = nn.Softmax(1)
 
     def forward(self, x):
         x = self.swin_encoder.forward_features(x)
-        x = self.features_layer_norm(x)
 
         b, hw, ch = x.shape
         h = w = int(np.sqrt(hw))
@@ -37,6 +40,22 @@ class SwinWeak(nn.Module):
         x = x.permute(0, 3, 1, 2)  # b, ch, h, w
 
         return self.head(x)
+
+    def segmentation(self, x):
+        y = self.forward(x)
+
+        x = self.gaussian_blur(x.squeeze(1))
+        mask = torch.ones_like(x)
+        for i in range(4):
+            mask *= _get_layer_attention_mask(self.attentions, 384, 4, 12, i, list(range(2)) if i != 2 else list(range(18)))
+
+        mask = mask * x
+        b, h, w = mask.shape
+        softmax = x.reshape(1, -1)
+        softmax = self.softmax(softmax)
+        softmax = softmax.reshape(b, h, w)
+        softmax = (softmax - softmax.min()) / (softmax.max() - softmax.min())
+        return y, softmax
 
 
 class Head(nn.Module):
@@ -56,7 +75,7 @@ class Head(nn.Module):
 def reshape_transform(height, width):
     def reshape(tensor):
         result = tensor.reshape(tensor.size(0),
-            height, width, tensor.size(2))
+                                height, width, tensor.size(2))
 
         # Bring the channels to the first dimension,
         # like in CNNs.
@@ -89,36 +108,8 @@ def get_attentions(att_dict, layer_block):
     return hook
 
 
-def get_attention_mask(attentions, g_cam=None, img_size=384, patch_size=4, window_size=12, device='cpu'):
-    func = _get_layer_attention_mask
-    softmax_layer = nn.Softmax(dim=1)
-
-    mask0 = func(attentions, img_size, patch_size, window_size, 0, list(range(2)), device)
-    mask1 = func(attentions, img_size, patch_size, window_size, 1, list(range(2)), device)
-    mask2 = func(attentions, img_size, patch_size, window_size, 2, list(range(18)), device)
-    mask3 = func(attentions, img_size, patch_size, window_size, 3, list(range(2)), device)
-    # cv2.imshow('last', mask3.cpu().numpy())
-    # cv2.imshow('second last', mask2.cpu().numpy())
-
-    if g_cam is None:
-        f_mask = mask3 * mask2 * mask1 * mask0
-    else:
-        g_cam = torch.tensor(g_cam, device=device)
-        f_mask = g_cam * mask2 * mask1 * mask0
-
-    H, W = f_mask.shape
-    softmax = f_mask
-    softmax = softmax.reshape(1, -1)
-    softmax = softmax_layer(softmax)
-    softmax = softmax.reshape(H, W)
-    softmax = (softmax - softmax.min()) / (softmax.max() - softmax.min())
-    # cv2.imwrite(r'C:\rsna-ich\sample images\softmax.bmp', 255 * softmax.cpu().numpy())
-
-    return softmax
-
-
 def _get_layer_attention_mask(attentions: dict, img_size: int, patch_size: int, window_size: int,
-                              layer: int, blocks: list, device='cpu'):
+                              layer: int, blocks: list, device='cuda'):
     total_tokens = img_size // patch_size
     layer_tokens = total_tokens // (2 ** layer)
     shift_size = window_size // 2
@@ -164,147 +155,3 @@ def _get_layer_attention_mask(attentions: dict, img_size: int, patch_size: int, 
     final_mask = F.interpolate(final_mask, size=(img_size, img_size), mode='bilinear').squeeze()
     # cv2.imwrite(rf'C:\rsna-ich\sample images\layer {layer} interpolated.bmp', 255 * final_mask.cpu().numpy())
     return final_mask
-
-
-def segmentation(model: torch.nn.Module, dataloader, threshold, show_images=False, device='cpu'):
-    model.to(device)
-    model.eval()
-
-    # gcam0 = GradCAM(model=model, target_layers=[model.layers[0].blocks[-1].norm1], use_cuda=True, reshape_transform=reshape_transform(96, 96))
-    # gcam1 = GradCAM(model=model, target_layers=[model.layers[1].blocks[-1].norm1], use_cuda=True, reshape_transform=reshape_transform(48, 48))
-    # gcam2 = GradCAM(model=model, target_layers=[model.layers[2].blocks[-1].norm1], use_cuda=True, reshape_transform=reshape_transform(24, 24))
-    # gcam3 = GradCAM(model=model, target_layers=[model.layers[3].blocks[-1].norm1], use_cuda=True, reshape_transform=reshape_transform(12, 12))
-
-    confusion_matrix = ConfusionMatrix()
-    attentions = {}
-    if isinstance(model, nn.Sequential):
-        backbone = model[0]
-    else:
-        backbone = model
-    for ln, layer in enumerate(backbone.layers):
-        for bn, block in enumerate(layer.blocks):
-            block.attn.softmax.register_forward_hook(get_attentions(attentions, f'{ln}_{bn}'))
-
-    dices = []
-    ious = []
-    for sample, mask, label in dataloader:
-        attentions.clear()
-        sample, mask = sample.to(device), mask.to(device)
-        with torch.no_grad():
-            output = model(sample)
-            confusion_matrix(torch.sigmoid(output), label)
-
-        dice, iou = np.nan, np.nan
-        if mask.any():
-            img = sample.squeeze()
-            brain_window = img[0]
-            mask = mask[0]
-
-            # cv2.imwrite(r'C:\rsna-ich\sample images\sample.bmp', 255 * img.permute(1, 2, 0).cpu().numpy())
-            # cv2.imwrite(r'C:\rsna-ich\sample images\brain window.bmp', 255 * brain_window.cpu().numpy())
-            # cv2.imwrite(r'C:\rsna-ich\sample images\subdural window.bmp', 255 * img[1].cpu().numpy())
-            # cv2.imwrite(r'C:\rsna-ich\sample images\bone window.bmp', 255 * img[2].cpu().numpy())
-            # cv2.imwrite(r'C:\rsna-ich\sample images\mask.bmp', 255 * mask.cpu().numpy())
-            # grayscale_cam = gcam3(input_tensor=sample)[0]
-            # pred_mask = torch.tensor(grayscale_cam, device=device)
-
-            grayscale_cam = None
-            pred_mask = get_attention_mask(attentions, grayscale_cam, device=device)
-
-            denoized_brain_window = torch.tensor(cv2.GaussianBlur(brain_window.cpu().numpy(), (9, 9),
-                                                                  cv2.BORDER_DEFAULT), device=device)
-            # cv2.imwrite(r'C:\rsna-ich\sample images\denoised brain window.bmp',
-            #             255 * denoized_brain_window.cpu().numpy())
-            pred_mask = pred_mask * denoized_brain_window
-
-            # cv2.imshow('pred mask', pred_mask.cpu().numpy())
-            # cv2.imwrite(r'C:\rsna-ich\sample images\pred mask.bmp', 255 * pred_mask.cpu().numpy())
-            # cv2.imshow('attention map', pred_mask.cpu().numpy())
-
-            pred_mask = binarization_simple_thresholding(pred_mask, threshold)
-
-            # cv2.imwrite(r'C:\rsna-ich\sample images\threshold mask.bmp', 255 * pred_mask.cpu().numpy())
-
-            dice = dice_metric(pred_mask, mask).item()
-            confusion_matrix.dices.append(dice)
-            # print('\n', dice)
-            iou = intersection_over_union(pred_mask, mask).item()
-
-            if show_images:
-                TP = torch.where(mask > 0, 1, 0) * torch.where(pred_mask > 0, 1, 0)
-                FP = torch.where(pred_mask > 0, 1, 0) * torch.where(mask > 0, 0, 1)
-                FN = torch.where(mask > 0, 1, 0) * torch.where(pred_mask > 0, 0, 1)
-
-                m = torch.stack([FN, TP, FP])
-                m = m.permute(1, 2, 0).cpu().numpy().astype(np.float)
-
-                gt_mask = deepcopy(brain_window)
-                gt_mask[FN > 0] = 1
-
-                predicted_mask = deepcopy(brain_window)
-                predicted_mask[FP > 0] = 1
-
-                correct_pred = deepcopy(brain_window)
-                correct_pred[TP > 0] = 1
-
-                segmentation_image = torch.stack([gt_mask, correct_pred, predicted_mask])
-                segmentation_image = segmentation_image.permute(1, 2, 0).cpu().numpy()
-
-                cv2.imshow('segmentation', segmentation_image)
-                # cv2.imwrite(r'C:\rsna-ich\sample images\segmentations\segmentation-combined.bmp', 255 * segmentation_image)
-                # cv2.imwrite(r'C:\rsna-ich\sample images\segmentations\brain_window.bmp', 255 * brain_window.cpu().numpy())
-                # cv2.imwrite(r'C:\rsna-ich\sample images\segmentations\pmask-combined.bmp', 255 * m)
-                # cv2.imshow('mask', m)
-                #
-                # grayscale_cam0 = gcam3(input_tensor=sample)[0]
-                #
-                # # grayscale_cam1 = gcam1(input_tensor=sample)[0]
-                # # grayscale_cam2 = gcam2(input_tensor=sample)[0]
-                # # grayscale_cam3 = gcam3(input_tensor=sample)[0]
-                #
-                # cv2.imshow('cam0', grayscale_cam0)
-                # # cv2.imshow('cam1', grayscale_cam1)
-                # # cv2.imshow('cam2', grayscale_cam2)
-                # # cv2.imshow('cam3', grayscale_cam3)
-                # # all_g = grayscale_cam3 * grayscale_cam2 * grayscale_cam1 * grayscale_cam0
-                # # all_g = (all_g - all_g.min()) / (all_g.max() - all_g.min())
-                # # cv2.imshow('all', all_g)
-                # # cv2.imshow('mean', (grayscale_cam3 + grayscale_cam2 + grayscale_cam1 + grayscale_cam0) / 4)
-                # grayscale_cam0 = (grayscale_cam0 * 255).astype(np.uint8)
-                # ret, grayscale_cam0 = cv2.threshold(grayscale_cam0, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                # grayscale_cam0 = torch.tensor(grayscale_cam0, device=device)
-                # TP2 = torch.where(mask > 0, 1, 0) * torch.where(grayscale_cam0 > 0, 1, 0)
-                # FP2 = torch.where(grayscale_cam0 > 0, 1, 0) * torch.where(mask > 0, 0, 1)
-                # FN2 = torch.where(mask > 0, 1, 0) * torch.where(grayscale_cam0 > 0, 0, 1)
-                #
-                # m2 = torch.stack([FN2, TP2, FP2])
-                # m2 = m2.permute(1, 2, 0).cpu().numpy().astype(np.float)
-                #
-                # gt_mask2 = deepcopy(brain_window)
-                # gt_mask2[FN2 > 0] = 1
-                #
-                # predicted_mask2 = deepcopy(brain_window)
-                # predicted_mask2[FP2 > 0] = 1
-                #
-                # correct_pred2 = deepcopy(brain_window)
-                # correct_pred2[TP2 > 0] = 1
-                #
-                # segmentation_image2 = torch.stack([gt_mask2, correct_pred2, predicted_mask2])
-                # segmentation_image2 = segmentation_image2.permute(1, 2, 0).cpu().numpy()
-                # cv2.imshow('segmentation2', segmentation_image2)
-                # cv2.imwrite(r'C:\rsna-ich\sample images\segmentations\segmentation2-combined.bmp',
-                #             255 * segmentation_image2)
-                # cv2.imwrite(r'C:\rsna-ich\sample images\segmentations\pmask2-combined.bmp', 255 * m2)
-                # cv2.imshow('mask2', m2)
-
-                cv2.waitKey()
-
-        dices.append(dice)
-        ious.append(iou)
-        # plt.hist(dices)
-        # plt.show()
-    mean_dice = np.nanmean(dices)
-    mean_iou = np.nanmean(ious)
-
-    confusion_matrix.compute_confusion_matrix()
-    return mean_dice, mean_iou, confusion_matrix

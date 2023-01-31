@@ -10,7 +10,7 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
     pbar_train = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
     pbar_train.set_description('training')
     _metrics = {"train_cfm": ConfusionMatrix(), "valid_cfm": ConfusionMatrix()}
-    augmentation = Augmentation()
+    augmentation = Augmentation(device)
 
     for i, (sample, label) in pbar_train:
         optimizer.zero_grad()

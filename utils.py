@@ -163,7 +163,7 @@ class DiceBCELoss(nn.Module):
         return Dice_BCE
 
 
-class DiceFocalBCELoss(nn.Module):
+class FocalDiceBCELoss(nn.Module):
     def __init__(self, gamma=2, alpha=0.5, reduction='mean'):
         super().__init__()
         self.dice = DiceLoss()
@@ -174,6 +174,20 @@ class DiceFocalBCELoss(nn.Module):
         BCE = F.binary_cross_entropy_with_logits(inputs, targets, reduction='mean')
         focal_BCE = self.focal_bce(inputs, targets)
         Dice_Focal_BCE = BCE + dice_loss + focal_BCE
+
+        return Dice_Focal_BCE
+
+
+class FocalDiceLoss(nn.Module):
+    def __init__(self, gamma=2, alpha=0.5, reduction='mean'):
+        super().__init__()
+        self.dice = DiceLoss()
+        self.focal_bce = FocalLoss(gamma, alpha, reduction)
+
+    def forward(self, inputs, targets, smooth=1):
+        dice_loss = self.dice(inputs, targets, smooth)
+        focal_BCE = self.focal_bce(inputs, targets)
+        Dice_Focal_BCE = dice_loss + focal_BCE
 
         return Dice_Focal_BCE
 

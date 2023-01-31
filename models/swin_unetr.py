@@ -7,7 +7,7 @@ import torch
 
 
 class SwinUNetR(nn.Module):
-    def __init__(self, num_classes, in_ch, embed_dims=None):
+    def __init__(self, in_ch, num_classes, embed_dims=None):
         super().__init__()
         if embed_dims is None:
             self.embed_dims = [128, 256, 512, 1024, 2048]

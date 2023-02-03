@@ -34,7 +34,7 @@ def main(args: argparse.Namespace):
         loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
 
     if args.setup == "rsna":
-        train_rsna(args.rsna_path, model, loss_fn, args.batch_size, args.num_workers)
+        train_rsna(args.rsna_path, model, loss_fn, int(args.batch_size), int(args.num_workers))
     else:
         train_and_test_physionet(args.physio_path, model, loss_fn)
 
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     parser.add_argument("--model", help="swin-weak, swin-unet, or unet", default="unet")
     parser.add_argument("--setup", help="rsna or physio", default="physio")
     parser.add_argument("--loss", help="focal, bce, dice, dicebce, or focaldicebce", default="focal")
-    parser.add_argument("--bsize", help="batch size", default=16)
-    parser.add_argument("--workers", help="number of workers", default=1)
+    parser.add_argument("--batch_size", help="batch size", default=16)
+    parser.add_argument("--num_workers", help="number of workers", default=1)
 
     main(parser.parse_args())

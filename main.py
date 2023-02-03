@@ -45,7 +45,7 @@ def train_rsna(root_dir):
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
     loss_fn = FocalLoss(reduction='sum')
     # loss_fn = nn.BCEWithLogitsLoss()
-    early_stopping = EarlyStopping(model, 3, r'weights\swin-weak.pth')
+    early_stopping = EarlyStopping(model, 3, r'weights\swin-weak-focal-2.pth')
     epoch = 1
     while not early_stopping.early_stop:
         m = train_one_epoch(model, optimizer, loss_fn, train_loader, valid_loader)

@@ -46,7 +46,7 @@ def rsna_2d_train_validation_split(root_dir: str, validation_size=0.05, random_s
     pbar = tqdm(total_filenames, total=len(total_filenames))
     pbar.set_description("reading files and labels")
     for filename in pbar:
-        labels.append([float(labels_dict[key]) for key in [filename.removesuffix('.dcm') + "_" + x for x in SUBTYPES]])
+        labels.append([float(labels_dict[key]) for key in [filename.split('.')[0] + "_" + x for x in SUBTYPES]])
 
     labels = np.array(labels)
 
@@ -69,7 +69,7 @@ def rsna_3d_train_validation_split(root_dir: str, validation_size=0.05, random_s
     for label_filename in tqdm(labels):
         file_path = labels_dir + '\\' + label_filename
         df = pd.read_csv(file_path)
-        filenames.append(label_filename.removesuffix('.csv')), hemorrhages_counts.append(sum(df["any"]))
+        filenames.append(label_filename.split(".")[0]), hemorrhages_counts.append(sum(df["any"]))
 
     train_filenames, validation_filenames, train_counts, validation_counts = train_test_split(filenames, hemorrhages_counts, test_size=validation_size, random_state=random_state)
     with open(train_split_path, "wb") as tf, open(validation_split_path, "wb") as vf:
@@ -302,7 +302,7 @@ class PhysioNetICHDataset3D(Dataset):
         if torch.is_tensor(item):
             item = item.tolist()
 
-        patient_number = int(self.filenames[item].removesuffix('.nii'))
+        patient_number = int(self.filenames[item].split(".")[0])
         image_path = os.path.join(self.scans_dir, self.filenames[item])
         mask_path = os.path.join(self.masks_dir, self.filenames[item])
 

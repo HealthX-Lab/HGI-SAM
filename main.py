@@ -1,18 +1,7 @@
-import nibabel
-import os
-import cv2
-import numpy as np
-from tqdm import tqdm
 from dataset import *
-from torchvision import transforms
-from utils import *
-import torch.nn as nn
 from train import *
-import torch
 from preprocessing import *
 from torch.utils.data import DataLoader, Subset
-import timm
-from collections import Counter
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.preprocessing import LabelEncoder
 from models.unet import *
@@ -22,7 +11,6 @@ from models.swin_weak import *
 import torch.optim as optim
 from utils import *
 import statistics
-from pytorch_metric_learning import losses
 import argparse
 
 

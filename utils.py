@@ -1,6 +1,5 @@
 import torch.nn as nn
 import torch
-import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 import torch.nn.functional as F
@@ -225,13 +224,6 @@ def save_model(model: nn.Module, path: str):
 
 def load_model(model: nn.Module, path: str):
     model.load_state_dict(torch.load(path))
-
-
-def plot_diagram(*metrics):
-    fig, axes = plt.subplots(len(metrics))
-    for i in range(len(metrics)):
-        axes[i].plot(range(1, 1 + len(metrics[i])), metrics[i])
-    plt.show()
 
 
 def dice_metric(predicted_mask, gt_mask):

@@ -1,20 +1,8 @@
-import torch.nn as nn
-import torch.nn.functional as F
-import torch
 from utils import *
-from copy import deepcopy
-from tqdm import tqdm
-import statistics
 import timm
-from torchvision.transforms import GaussianBlur
-from torchvision.models import resnet50
-from pytorch_grad_cam import GradCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from pytorch_grad_cam.utils.image import show_cam_on_image
 from models.unet import ConvBlock
 from torchvision.transforms import GaussianBlur
 from collections import OrderedDict
-import cv2
 
 
 class SwinWeak(nn.Module):

@@ -15,12 +15,33 @@ import argparse
 
 
 def main(args: argparse.Namespace):
-    train_and_test_physionet(args.physio_path)
-    # train_rsna(args.rsna_path)
+    if args.model == "swin-unetr":
+        model = SwinUNetR(3, 1)
+    elif args.model == "unet":
+        model = UNet(3, 1)
+    else:
+        model = SwinWeak(3, 1)
+
+    if args.loss == "focal":
+        loss_fn = FocalLoss()
+    elif args.loss == "dice":
+        loss_fn = DiceLoss()
+    elif args.loss == "dicebce":
+        loss_fn = DiceBCELoss()
+    elif args.loss == "focaldicebce":
+        loss_fn = FocalDiceBCELoss()
+    else:
+        loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
+
+    if args.setup == "rsna":
+        train_rsna(args.rsna_path, model, loss_fn)
+    else:
+        train_and_test_physionet(args.physio_path, model, loss_fn)
 
 
-def train_rsna(root_dir):
+def train_rsna(root_dir, model, loss_fn):
     t_x, t_y, v_x, v_y = rsna_2d_train_validation_split(root_dir)
+    checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__
 
     windows = [(80, 200), (600, 2800)]
     transform = get_transform(384)
@@ -29,11 +50,8 @@ def train_rsna(root_dir):
     validation_ds = RSNAICHDataset2D(root_dir, v_x, v_y, windows=windows, transform=transform)
     valid_loader = DataLoader(validation_ds, batch_size=16, collate_fn=rsna_collate_binary_label)
 
-    model = SwinWeak(3, 1)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
-    loss_fn = FocalLoss(reduction='sum')
-    # loss_fn = nn.BCEWithLogitsLoss()
-    early_stopping = EarlyStopping(model, 3, r'weights\swin-weak-focal-2.pth')
+    early_stopping = EarlyStopping(model, 3, checkpoint_name + ".pth")
     epoch = 1
     while not early_stopping.early_stop:
         m = train_one_epoch(model, optimizer, loss_fn, train_loader, valid_loader)
@@ -42,14 +60,9 @@ def train_rsna(root_dir):
         epoch += 1
 
 
-def train_physionet(model, train_loader, valid_loader, checkpoint_name, cf, device='cuda'):
+def train_physionet(model: nn.Module, loss_fn, train_loader, valid_loader, checkpoint_name, cf, device='cuda'):
     augmentation = Augmentation(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
-    # loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
-    # loss_fn = DiceBCELoss()
-    # loss_fn = DiceLoss()
-    loss_fn = FocalDiceBCELoss()
-    # loss_fn = FocalDiceLoss()
     early_stopping = EarlyStopping(model, 3, f'{checkpoint_name}-fold{cf}.pth')
     while not early_stopping.early_stop:
         m = train_one_epoch_segmentation(model, optimizer, loss_fn, train_loader, valid_loader, augmentation=augmentation, device=device)
@@ -57,10 +70,10 @@ def train_physionet(model, train_loader, valid_loader, checkpoint_name, cf, devi
         early_stopping(m['valid_cfm'].get_mean_loss())
 
 
-def train_and_test_physionet(physio_path):
+def train_and_test_physionet(physio_path, model, loss_fn):
     k = 10
     device = 'cuda'
-    checkpoint_name = r'unet'
+    checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__
 
     ds = PhysioNetICHDataset2D(physio_path,  windows=[(80, 340), (700, 3200)], transform=get_transform(384))
 
@@ -80,10 +93,7 @@ def train_and_test_physionet(physio_path):
         valid_loader = DataLoader(valid_ds, batch_size=1, collate_fn=physio_collate_image_mask)
         test_loader = DataLoader(test_ds, batch_size=1, collate_fn=physio_collate_image_mask)
 
-        model = UNet(3, 1)
-        # model = SwinUNetR(1, 1)
-        # model = SwinWeak(3, 1)
-        train_physionet(model, train_loader, valid_loader, checkpoint_name, cf, device)
+        train_physionet(model, loss_fn, train_loader, valid_loader, checkpoint_name, cf, device)
         load_model(model, f'{checkpoint_name}-fold{cf}.pth')
         test_cfm = test_physionet(model, test_loader, False, 0.5, device)
 
@@ -129,5 +139,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--rsna_path", help="path to the rsna dataset root directory", default=r'C:\rsna-ich')
     parser.add_argument("--physio_path", help="path to the physionet dataset root directory", default=r'C:\physio-ich')
+    parser.add_argument("--model", help="swin-weak, swin-unet, or unet", default="unet")
+    parser.add_argument("--setup", help="rsna or physio", default="physio")
+    parser.add_argument("--loss", help="focal, bce, dice, dicebce, or focaldicebce", default="focal")
 
     main(parser.parse_args())

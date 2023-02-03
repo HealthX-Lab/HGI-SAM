@@ -15,8 +15,8 @@ import argparse
 
 
 def main(args: argparse.Namespace):
-    # train_and_test_physionet()
-    train_rsna(args.rsna_path)
+    train_and_test_physionet(args.physio_path)
+    # train_rsna(args.rsna_path)
 
 
 def train_rsna(root_dir):
@@ -42,13 +42,14 @@ def train_rsna(root_dir):
         epoch += 1
 
 
-def train_physionet(model, train_loader, valid_loader, checkpoint_name, cf):
+def train_physionet(model, train_loader, valid_loader, checkpoint_name, cf, device='cuda'):
+    augmentation = Augmentation(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
     # loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
     # loss_fn = DiceBCELoss()
     # loss_fn = DiceLoss()
-    # loss_fn = FocalDiceBCELoss()
-    loss_fn = FocalDiceLoss()
+    loss_fn = FocalDiceBCELoss()
+    # loss_fn = FocalDiceLoss()
     early_stopping = EarlyStopping(model, 3, f'{checkpoint_name}-fold{cf}.pth')
     while not early_stopping.early_stop:
         m = train_one_epoch_segmentation(model, optimizer, loss_fn, train_loader, valid_loader, augmentation=augmentation, device=device)
@@ -56,13 +57,12 @@ def train_physionet(model, train_loader, valid_loader, checkpoint_name, cf):
         early_stopping(m['valid_cfm'].get_mean_loss())
 
 
-def train_and_test_physionet():
+def train_and_test_physionet(physio_path):
     k = 10
     device = 'cuda'
-    checkpoint_name = r'weights\swin-unetr'
-    augmentation = Augmentation(device)
+    checkpoint_name = r'unet'
 
-    ds = PhysioNetICHDataset2D(r'C:\physio-ich',  windows=[(80, 340), (700, 3200)], transform=get_transform(384))
+    ds = PhysioNetICHDataset2D(physio_path,  windows=[(80, 340), (700, 3200)], transform=get_transform(384))
 
     indices = np.arange(0, len(ds.labels))
     encoded_labels = LabelEncoder().fit_transform([''.join(str(l)) for l in ds.labels])
@@ -80,12 +80,12 @@ def train_and_test_physionet():
         valid_loader = DataLoader(valid_ds, batch_size=1, collate_fn=physio_collate_image_mask)
         test_loader = DataLoader(test_ds, batch_size=1, collate_fn=physio_collate_image_mask)
 
-        # model = UNet(1, 1)
+        model = UNet(3, 1)
         # model = SwinUNetR(1, 1)
-        model = SwinWeak(3, 1)
-        train_physionet(model, train_loader, valid_loader, checkpoint_name, cf)
-        # load_model(model, f'{checkpoint_name}-fold{cf}.pth')
-        test_cfm = test_physionet(model, test_loader, True, 0.06, device)
+        # model = SwinWeak(3, 1)
+        train_physionet(model, train_loader, valid_loader, checkpoint_name, cf, device)
+        load_model(model, f'{checkpoint_name}-fold{cf}.pth')
+        test_cfm = test_physionet(model, test_loader, False, 0.5, device)
 
         test_cfm_matrices.append(test_cfm)
         print(f'fold {cf+1} dice:', test_cfm.get_mean_dice(), ' iou:', test_cfm.get_mean_iou(), ' hausdorff:', test_cfm.get_mean_hausdorff_distance())
@@ -128,6 +128,6 @@ def test_physionet(model, test_loader, weak_model=False, threshold=0.5, device="
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--rsna_path", help="path to the rsna dataset root directory", default=r'C:\rsna-ich')
-    parser.add_argument("--physio_path", help="path to the physionet dataset root directory")
+    parser.add_argument("--physio_path", help="path to the physionet dataset root directory", default=r'C:\physio-ich')
 
     main(parser.parse_args())

@@ -34,21 +34,21 @@ def main(args: argparse.Namespace):
         loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
 
     if args.setup == "rsna":
-        train_rsna(args.rsna_path, model, loss_fn)
+        train_rsna(args.rsna_path, model, loss_fn, args.batch_size, args.num_workers)
     else:
         train_and_test_physionet(args.physio_path, model, loss_fn)
 
 
-def train_rsna(root_dir, model, loss_fn):
+def train_rsna(root_dir, model, loss_fn, batch_size, num_workers):
     t_x, t_y, v_x, v_y = rsna_2d_train_validation_split(root_dir)
     checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__
 
     windows = [(80, 200), (600, 2800)]
     transform = get_transform(384)
     train_ds = RSNAICHDataset2D(root_dir, t_x, t_y, windows=windows, transform=transform)
-    train_loader = DataLoader(train_ds, batch_size=16, shuffle=True, collate_fn=rsna_collate_binary_label)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, shuffle=True, collate_fn=rsna_collate_binary_label)
     validation_ds = RSNAICHDataset2D(root_dir, v_x, v_y, windows=windows, transform=transform)
-    valid_loader = DataLoader(validation_ds, batch_size=16, collate_fn=rsna_collate_binary_label)
+    valid_loader = DataLoader(validation_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
     early_stopping = EarlyStopping(model, 3, checkpoint_name + ".pth")
@@ -142,5 +142,7 @@ if __name__ == '__main__':
     parser.add_argument("--model", help="swin-weak, swin-unet, or unet", default="unet")
     parser.add_argument("--setup", help="rsna or physio", default="physio")
     parser.add_argument("--loss", help="focal, bce, dice, dicebce, or focaldicebce", default="focal")
+    parser.add_argument("--bsize", help="batch size", default=16)
+    parser.add_argument("--workers", help="number of workers", default=1)
 
     main(parser.parse_args())

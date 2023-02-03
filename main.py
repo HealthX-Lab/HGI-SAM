@@ -22,45 +22,59 @@ from models.swin_weak import *
 import torch.optim as optim
 from utils import *
 import statistics
+from pytorch_metric_learning import losses
+import argparse
 
 
-def main():
+def main(args: argparse.Namespace):
     # train_and_test_physionet()
-    train_rsna()
+    train_rsna(args.rsna_path)
 
 
-def train_rsna():
-    root_dir = r'C:\rsna-ich'
-
+def train_rsna(root_dir):
     t_x, t_y, v_x, v_y = rsna_2d_train_validation_split(root_dir)
-    train_ds = RSNAICHDataset2D(root_dir, t_x, t_y, transform=get_transform(384))
-    train_loader = DataLoader(train_ds, batch_size=16, shuffle=True, pin_memory=True, collate_fn=rsna_collate_binary_label)
-    validation_ds = RSNAICHDataset2D(root_dir, v_x, v_y, transform=get_transform(384))
+
+    windows = [(80, 200), (600, 2800)]
+    transform = get_transform(384)
+    train_ds = RSNAICHDataset2D(root_dir, t_x[:100], t_y[:100], windows=windows, transform=transform)
+    train_loader = DataLoader(train_ds, batch_size=16, shuffle=True, collate_fn=rsna_collate_binary_label)
+    validation_ds = RSNAICHDataset2D(root_dir, v_x[:10], v_y[:10], windows=windows, transform=transform)
     valid_loader = DataLoader(validation_ds, batch_size=16, collate_fn=rsna_collate_binary_label)
 
-    model = SwinWeak(1, 1)
+    model = SwinWeak(3, 1)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
-    loss_fn = FocalLoss()
+    loss_fn = FocalLoss(reduction='sum')
+    # loss_fn = nn.BCEWithLogitsLoss()
     early_stopping = EarlyStopping(model, 3, r'weights\swin-weak.pth')
     epoch = 1
     while not early_stopping.early_stop:
         m = train_one_epoch(model, optimizer, loss_fn, train_loader, valid_loader)
         early_stopping(m['valid_cfm'].get_mean_loss())
-        print("epoch:", epoch)
-        print("train-loss=", m['train_cfm'].get_mean_loss(), " valid-loss=", m['valid_cfm'].get_mean_loss())
-        print("train-acc=", m['train_cfm'].get_accuracy(), " valid-acc=", m['valid_cfm'].get_accuracy())
-        print("train-F1=", m['train_cfm'].get_f1_score(), " valid-F1=", m['valid_cfm'].get_f1_score())
-        print()
+        print("epoch:", epoch, "acc=", m['valid_cfm'].get_accuracy(), " F1=", m['valid_cfm'].get_f1_score())
+        epoch += 1
+
+
+def train_physionet(model, train_loader, valid_loader, checkpoint_name, cf):
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    # loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
+    # loss_fn = DiceBCELoss()
+    # loss_fn = DiceLoss()
+    # loss_fn = FocalDiceBCELoss()
+    loss_fn = FocalDiceLoss()
+    early_stopping = EarlyStopping(model, 3, f'{checkpoint_name}-fold{cf}.pth')
+    while not early_stopping.early_stop:
+        m = train_one_epoch_segmentation(model, optimizer, loss_fn, train_loader, valid_loader, augmentation=augmentation, device=device)
+        print('\nvalid dice:', m['valid_cfm'].get_mean_dice(), ' IoU:', m['valid_cfm'].get_mean_iou(), ' Hausdorff:', m['valid_cfm'].get_mean_hausdorff_distance())
+        early_stopping(m['valid_cfm'].get_mean_loss())
 
 
 def train_and_test_physionet():
     k = 10
     device = 'cuda'
     checkpoint_name = r'weights\swin-unetr'
-    transform = get_transform(384)
     augmentation = Augmentation(device)
 
-    ds = PhysioNetICHDataset2D(r'C:\physio-ich', transform=transform)
+    ds = PhysioNetICHDataset2D(r'C:\physio-ich',  windows=[(80, 340), (700, 3200)], transform=get_transform(384))
 
     indices = np.arange(0, len(ds.labels))
     encoded_labels = LabelEncoder().fit_transform([''.join(str(l)) for l in ds.labels])
@@ -80,21 +94,10 @@ def train_and_test_physionet():
 
         # model = UNet(1, 1)
         # model = SwinUNetR(1, 1)
-        model = SwinWeak(1, 1)
-        # optimizer = optim.Adam(model.parameters(), lr=1e-4)
-        # # loss_fn = nn.BCEWithLogitsLoss(reduction='mean')
-        # # loss_fn = DiceBCELoss()
-        # # loss_fn = DiceLoss()
-        # # loss_fn = FocalDiceBCELoss()
-        # loss_fn = FocalDiceLoss()
-        # early_stopping = EarlyStopping(model, 3, f'{checkpoint_name}-fold{cf}.pth')
-        # while not early_stopping.early_stop:
-        #     m = train_one_epoch_segmentation(model, optimizer, loss_fn, train_loader, valid_loader, augmentation=augmentation, device=device)
-        #     print('\nvalid dice:', m['valid_cfm'].get_mean_dice(), ' IoU:', m['valid_cfm'].get_mean_iou(), ' Hausdorff:', m['valid_cfm'].get_mean_hausdorff_distance())
-        #     early_stopping(m['valid_cfm'].get_mean_loss())
-        #
+        model = SwinWeak(3, 1)
+        train_physionet(model, train_loader, valid_loader, checkpoint_name, cf)
         # load_model(model, f'{checkpoint_name}-fold{cf}.pth')
-        test_cfm = test_physionet(model, test_loader, True, 0.01, device)
+        test_cfm = test_physionet(model, test_loader, True, 0.06, device)
 
         test_cfm_matrices.append(test_cfm)
         print(f'fold {cf+1} dice:', test_cfm.get_mean_dice(), ' iou:', test_cfm.get_mean_iou(), ' hausdorff:', test_cfm.get_mean_hausdorff_distance())
@@ -121,10 +124,11 @@ def test_physionet(model, test_loader, weak_model=False, threshold=0.5, device="
             if not label.any():
                 continue
             if weak_model:
-                pred = model.segmentation(image)
+                pred, pred_mask = model.segmentation(image)
             else:
-                pred = model(image)
-            pred_mask = torch.sigmoid(pred).squeeze(1)
+                pred_mask = model(image)
+                pred_mask = torch.sigmoid(pred_mask).squeeze(1)
+
             pred_mask = binarization_simple_thresholding(pred_mask, threshold)
             test_cfm.add_dice(dice_metric(pred_mask, label))
             test_cfm.add_iou(intersection_over_union(pred_mask, label))
@@ -134,4 +138,8 @@ def test_physionet(model, test_loader, weak_model=False, threshold=0.5, device="
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument("--rsna_path", help="path to the rsna dataset root directory", default=r'C:\rsna-ich')
+    parser.add_argument("--physio_path", help="path to the physionet dataset root directory")
+
+    main(parser.parse_args())

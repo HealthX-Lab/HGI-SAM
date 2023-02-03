@@ -14,12 +14,13 @@ from pytorch_grad_cam.utils.image import show_cam_on_image
 from models.unet import ConvBlock
 from torchvision.transforms import GaussianBlur
 from collections import OrderedDict
+import cv2
 
 
 class SwinWeak(nn.Module):
     def __init__(self, in_ch, num_classes):
         super().__init__()
-        self.swin_encoder = timm.models.swin_base_patch4_window12_384(in_chans=in_ch, num_classes=-1)
+        self.swin_encoder = timm.models.swin_base_patch4_window12_384(in_chans=in_ch, num_classes=num_classes)
 
         self.attentions = OrderedDict()
         for ln, layer in enumerate(self.swin_encoder.layers):
@@ -27,9 +28,8 @@ class SwinWeak(nn.Module):
                 block.attn.softmax.register_forward_hook(get_attentions(self.attentions, f'{ln}_{bn}'))
 
         self.head = Head(1024, num_classes)
-
-        self.gaussian_blur = GaussianBlur(9, 1)
-        self.softmax = nn.Softmax(1)
+        self.gaussian_blur = GaussianBlur(9, 2)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.swin_encoder.forward_features(x)
@@ -44,18 +44,21 @@ class SwinWeak(nn.Module):
     def segmentation(self, x):
         y = self.forward(x)
 
-        x = self.gaussian_blur(x.squeeze(1))
+        x = self.blur_brain_window(x)
         mask = torch.ones_like(x)
         for i in range(4):
             mask *= _get_layer_attention_mask(self.attentions, 384, 4, 12, i, list(range(2)) if i != 2 else list(range(18)))
-
         mask = mask * x
+
         b, h, w = mask.shape
-        softmax = x.reshape(1, -1)
+        softmax = mask.reshape(1, -1)
         softmax = self.softmax(softmax)
         softmax = softmax.reshape(b, h, w)
         softmax = (softmax - softmax.min()) / (softmax.max() - softmax.min())
         return y, softmax
+
+    def blur_brain_window(self, x):
+        return self.gaussian_blur(x[:, 0, :, :])
 
 
 class Head(nn.Module):
@@ -64,25 +67,12 @@ class Head(nn.Module):
         self.head = nn.Sequential(ConvBlock(in_ch, 128, 3),
                                   nn.Flatten(1),
                                   nn.Linear(12 * 12 * 128, 128),
-                                  nn.BatchNorm1d(128),
+                                  nn.InstanceNorm1d(128),
                                   nn.Dropout(0.2),
                                   nn.Linear(128, num_classes))
 
     def forward(self, x):
         return self.head(x)
-
-
-def reshape_transform(height, width):
-    def reshape(tensor):
-        result = tensor.reshape(tensor.size(0),
-                                height, width, tensor.size(2))
-
-        # Bring the channels to the first dimension,
-        # like in CNNs.
-        result = result.transpose(2, 3).transpose(1, 2)
-        return result
-
-    return reshape
 
 
 def window_reverse(windows, window_size: int, H: int, W: int):
@@ -123,27 +113,16 @@ def _get_layer_attention_mask(attentions: dict, img_size: int, patch_size: int, 
 
         mask = mask.reshape(-1, window_size, window_size, 1)
         mask = window_reverse(mask, window_size, layer_tokens, layer_tokens)
-        # if layer == 0:
-        #     print(mask.shape)
-        #     x = mask.squeeze().cpu().numpy()
-        #     x = (x - x.min()) / (x.max() - x.min())
-        #     cv2.imwrite(rf'C:\rsna-ich\sample images\maps\w{block_index}.bmp', x * 255)
+
         if block_index % 2 == 1:  # reverse shift for odd blocks
             mask = torch.roll(mask, shifts=(shift_size, shift_size), dims=(1, 2))
-            # if layer == 0:
-            #     x = mask.squeeze().cpu().numpy()
-            #     x = (x - x.min()) / (x.max() - x.min())
-            #     cv2.imwrite(rf'C:\rsna-ich\sample images\maps\sw{block_index}.bmp', x * 255)
+
         mask = mask.permute(0, 3, 1, 2)
         masks.append(mask)
 
     final_masks = []
     for i in range(0, len(masks), 2):
         swin_block_mask = masks[i] * masks[i + 1]
-        # if layer == 0:
-        #     x = swin_block_mask.squeeze().cpu().numpy()
-        #     x = (x - x.min()) / (x.max() - x.min())
-        #     cv2.imwrite(r'C:\rsna-ich\sample images\maps\mult.bmp', x * 255)
         final_masks.append(swin_block_mask)
 
     all_masks = torch.stack(final_masks)
@@ -151,7 +130,5 @@ def _get_layer_attention_mask(attentions: dict, img_size: int, patch_size: int, 
 
     final_mask = (final_mask - final_mask.min()) / (final_mask.max() - final_mask.min())
 
-    # cv2.imwrite(rf'C:\rsna-ich\sample images\layer {layer} attention.bmp', 255 * final_mask.squeeze().cpu().numpy())
     final_mask = F.interpolate(final_mask, size=(img_size, img_size), mode='bilinear').squeeze()
-    # cv2.imwrite(rf'C:\rsna-ich\sample images\layer {layer} interpolated.bmp', 255 * final_mask.cpu().numpy())
     return final_mask

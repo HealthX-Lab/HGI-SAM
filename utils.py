@@ -286,3 +286,14 @@ def binarization_otsu(image):
 
         binarized_image[index] = im
     return binarized_image
+
+
+def show_image(window_name, image):
+    for i in range(image.shape[0]):  # iterate over images in batch
+        if image.dim() == 3:
+            cv2.imshow(f'{window_name}-{i}', image[i].cpu().numpy())
+        elif image.shape[1] == 1:
+            cv2.imshow(f'{window_name}-{i}', image[i, 0].cpu().numpy())
+        else:  # colored image
+            cv2.imshow(f'{window_name}-{i}', image[i].permute(1, 2, 0).cpu().numpy())
+    cv2.waitKey()

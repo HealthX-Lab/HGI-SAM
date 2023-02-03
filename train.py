@@ -16,7 +16,7 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
         optimizer.zero_grad()
         sample, label = augmentation(sample.to(device)), label.to(device)
 
-        pred = model(sample).view(-1)
+        pred = model(sample)
         loss = loss_fn(pred, label)
         loss.backward()
         optimizer.step()
@@ -34,7 +34,7 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
         for i, (sample, label) in pbar_valid:
             sample, label = sample.to(device), label.to(device)
 
-            pred = model(sample).view(-1)
+            pred = model(sample)
             loss = loss_fn(pred, label)
 
             _metrics["valid_cfm"].add_loss(loss.item())

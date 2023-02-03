@@ -4,12 +4,12 @@ import numpy as np
 import random
 
 
-def window_image(image, window_params, rescale=True):
-    center, width, intercept, slope = window_params
+def window_image(image, window_params, intercept, slope, rescale=True):
+    center, width = window_params
     img_min = center - width // 2
     img_max = center + width // 2
 
-    image = slope * (image + intercept)
+    image = image * slope + intercept
     image[image < img_min] = img_min
     image[image > img_max] = img_max
 
@@ -21,7 +21,7 @@ def window_image(image, window_params, rescale=True):
 
 def get_transform(image_size):
     t = transforms.Compose([
-        transforms.Resize(int(1.2 * image_size)),
+        transforms.Resize(int(1.1 * image_size)),
         transforms.CenterCrop(image_size)
     ])
 

@@ -78,10 +78,10 @@ def rsna_3d_train_validation_split(root_dir: str, validation_size=0.05, random_s
     return train_filenames, validation_filenames
 
 
-def _get_image_windows(image, windows: [(int, int, int, int)]):
+def _get_image_windows(image, windows: [(int, int)], intercept, slope):
     window_images = []
     for window in windows:
-        window_images.append(window_image(image, window))
+        window_images.append(window_image(image, window, intercept, slope))
 
     return torch.stack(window_images)
 
@@ -145,11 +145,12 @@ class RSNAICHDataset2D(Dataset):
         image_path = os.path.join(self.train_dir, self.filenames[item])
 
         image, default_window_params = _read_image_2d(image_path)  # x, y
+        window_center, window_width, window_intercept, window_slope = default_window_params
         label = torch.FloatTensor(self.labels[item])
 
-        default_window = _get_image_windows(image, [default_window_params])
+        default_window = _get_image_windows(image, [(window_center, window_width)], window_intercept, window_slope)
         if self.windows is not None:
-            image = torch.cat([default_window, _get_image_windows(image, self.windows)])
+            image = torch.cat([default_window, _get_image_windows(image, self.windows, window_intercept, window_slope)])
         else:
             image = default_window
 
@@ -193,7 +194,7 @@ class RSNAICHDataset3D(Dataset):
             self.__getitem__(item + 1)
 
         if self.windows is not None:
-            image = _get_image_windows(image, self.windows)  # c, x, y, z
+            image = _get_image_windows(image, self.windows, 0, 1)  # c, x, y, z
 
         image = torch.movedim(image, image.dim() - 1, 0)
         if self.transform is not None:
@@ -263,9 +264,9 @@ class PhysioNetICHDataset2D(Dataset):
         if mask.max() > 0:  # change to range to 0-1
             mask = (mask - mask.min()) / (mask.max() - mask.min())
 
-        default_window = _get_image_windows(image, [(40, 120, 0, 1)])
+        default_window = _get_image_windows(image, [(40, 120)], 0, 1)
         if self.windows is not None:
-            image = torch.cat([default_window, _get_image_windows(image, self.windows)])
+            image = torch.cat([default_window, _get_image_windows(image, self.windows, 0, 1)])
         else:
             image = default_window
 
@@ -311,7 +312,7 @@ class PhysioNetICHDataset3D(Dataset):
         label = 1 - torch.FloatTensor(label['No_Hemorrhage'])
 
         if self.windows is not None:
-            image = _get_image_windows(image, self.windows)
+            image = _get_image_windows(image, self.windows, 0, 1)
         if mask.max() > 0:
             mask = (mask - mask.min()) / (mask.max() - mask.min())
 
@@ -349,5 +350,12 @@ def physio_collate_image_label(batch):
 def rsna_collate_binary_label(batch):
     data = torch.stack([item[0] for item in batch])
     target = torch.stack([item[1] for item in batch])
-    target = target[:, -1]
+    target = target[:, -1:]
+    return [data, target]
+
+
+def rsna_collate_subtypes_label(batch):
+    data = torch.stack([item[0] for item in batch])
+    target = torch.stack([item[1] for item in batch])
+    target = target[:, :-1]
     return [data, target]

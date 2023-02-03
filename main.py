@@ -36,9 +36,9 @@ def train_rsna(root_dir):
 
     windows = [(80, 200), (600, 2800)]
     transform = get_transform(384)
-    train_ds = RSNAICHDataset2D(root_dir, t_x[:100], t_y[:100], windows=windows, transform=transform)
+    train_ds = RSNAICHDataset2D(root_dir, t_x, t_y, windows=windows, transform=transform)
     train_loader = DataLoader(train_ds, batch_size=16, shuffle=True, collate_fn=rsna_collate_binary_label)
-    validation_ds = RSNAICHDataset2D(root_dir, v_x[:10], v_y[:10], windows=windows, transform=transform)
+    validation_ds = RSNAICHDataset2D(root_dir, v_x, v_y, windows=windows, transform=transform)
     valid_loader = DataLoader(validation_ds, batch_size=16, collate_fn=rsna_collate_binary_label)
 
     model = SwinWeak(3, 1)

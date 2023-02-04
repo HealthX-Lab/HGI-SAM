@@ -55,7 +55,7 @@ class Head(nn.Module):
         self.head = nn.Sequential(ConvBlock(in_ch, 128, 3),
                                   nn.Flatten(1),
                                   nn.Linear(12 * 12 * 128, 128),
-                                  nn.InstanceNorm1d(128),
+                                  nn.BatchNorm1d(128),
                                   nn.Dropout(0.2),
                                   nn.Linear(128, num_classes))
 

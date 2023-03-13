@@ -1,7 +1,7 @@
 import argparse
 import json
-from utils.dataset import rsna_2d_train_validation_split, RSNAICHDataset2D, rsna_collate_binary_label
-from utils.preprocessing import get_transform
+from utils.dataset import rsna_train_valid_split, RSNAICHDataset, rsna_collate_binary_label
+from utils.preprocessing import get_transform, Augmentation
 from utils.utils import *
 from utils.train import train_one_epoch
 from torch.utils.data import DataLoader, WeightedRandomSampler
@@ -33,12 +33,16 @@ def main():
     in_ch = config_dict["in_ch"]
     num_classes = config_dict["num_classes"]
 
-    t_x, t_y, v_x, v_y = rsna_2d_train_validation_split(data_path)
+    t_x, t_y, v_x, v_y = rsna_train_valid_split(data_path, validation_size=validation_ratio)
     windows = [(80, 200), (600, 2800)]
     transform = get_transform(384)
 
-    train_ds = RSNAICHDataset2D(data_path, t_x, t_y, windows=windows, transform=transform)
-    validation_ds = RSNAICHDataset2D(data_path, v_x, v_y, windows=windows, transform=transform)
+    augmentation = None
+    if do_augmentation:
+        augmentation = Augmentation()
+
+    train_ds = RSNAICHDataset(data_path, t_x, t_y, windows=windows, transform=transform)
+    validation_ds = RSNAICHDataset(data_path, v_x, v_y, windows=windows, transform=transform)
 
     train_sampler = None
     if do_sampling:

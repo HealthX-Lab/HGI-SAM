@@ -2,7 +2,7 @@ import argparse
 import json
 from utils.preprocessing import Augmentation
 from utils.utils import EarlyStopping, DiceBCELoss, ConfusionMatrix, dice_metric, hausdorff_distance, intersection_over_union, binarization_otsu, binarization_simple_thresholding, load_model
-from utils.dataset import PhysioNetICHDataset2D, physio_collate_image_mask
+from utils.dataset import PhysioNetICHDataset, physio_collate_image_mask
 from torch.utils.data import DataLoader, Subset
 from torch.optim import AdamW
 from models.unet import UNet
@@ -50,7 +50,7 @@ def train_and_test_physionet(physio_path, model, loss_fn):
     device = 'cuda'
     checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__
 
-    ds = PhysioNetICHDataset2D(physio_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
+    ds = PhysioNetICHDataset(physio_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
 
     indices = np.arange(0, len(ds.labels))
     encoded_labels = LabelEncoder().fit_transform([''.join(str(l)) for l in ds.labels])

@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from sklearn import metrics
 from skimage.filters import threshold_otsu
 from monai.metrics.utils import get_mask_edges, get_surface_distance
+import matplotlib.pyplot as plt
 
 
 class ConfusionMatrix:
@@ -289,3 +290,13 @@ def show_image(window_name, image):
         else:  # colored image
             cv2.imshow(f'{window_name}-{i}', image[i].permute(1, 2, 0).cpu().numpy())
     cv2.waitKey()
+
+
+def str_to_bool(string):
+    return True if string == "True" else False
+
+def visualize_losses(train_losses, valid_losses):
+    fig, axes = plt.subplots(2)
+    axes[0].plot(train_losses)
+    axes[1].plot(valid_losses)
+    plt.show()

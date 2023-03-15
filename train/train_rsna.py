@@ -7,13 +7,15 @@ from utils.dataset import rsna_train_valid_split, RSNAICHDataset, rsna_collate_b
 from utils.preprocessing import get_transform, Augmentation
 from utils.preprocessing import *
 from utils.utils import *
-from utils.train import train_one_epoch
+from utils.trainer import train_one_epoch
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.optim import AdamW
 from models.swin_weak import SwinWeak
 import torch
 from collections import Counter
 import os
+import cv2
+from monai.transforms import RandFlip
 
 
 def main():
@@ -37,7 +39,7 @@ def main():
     in_ch = config_dict["in_ch"]
     num_classes = config_dict["num_classes"]
 
-    t_x, t_y, v_x, v_y = rsna_train_valid_split(data_path, validation_size=validation_ratio, override=True)
+    t_x, t_y, v_x, v_y = rsna_train_valid_split(data_path, validation_size=validation_ratio, override=False)
     windows = [(80, 200), (600, 2800)]
     transform = get_transform(384)
 
@@ -61,10 +63,16 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label, sampler=train_sampler)
     valid_loader = DataLoader(validation_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label)
 
-    for n, (i, j) in enumerate(train_loader):
-        print(i.shape, j.shape, j)
-        if n > 10:
+    for i, (x, y) in enumerate(train_loader):
+        z = x[0].permute(1, 2, 0)
+        t = RandFlip(prob=1, spatial_axis=0)
+        cv2.imshow('img', z.numpy())
+        z = t(z)
+        cv2.imshow('flipped', z.numpy())
+        cv2.waitKey()
+        if i > 10:
             return
+
     model = SwinWeak(in_ch, num_classes)
     checkpoint_name = model.__class__.__name__
     num_params = sum(p.numel() for p in model.parameters()) / 1e6

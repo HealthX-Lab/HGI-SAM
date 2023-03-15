@@ -2,6 +2,8 @@ from torchvision import transforms
 import torch
 import numpy as np
 import random
+from monai.transforms import Compose, RandFlipD, RandAffineD, RandGaussianNoiseD
+from numpy import deg2rad
 
 
 def window_image(image, window_params, intercept, slope, rescale=True):
@@ -28,46 +30,23 @@ def get_transform(image_size):
     return t
 
 
-class _AddGaussianNoise(object):
-    def __init__(self, mean=0., std=1., device='cuda'):
-        self.std = std
-        self.mean = mean
-        self.device = device
-
-    def __call__(self, tensor):
-        return tensor + torch.randn(tensor.size(), device=self.device) * self.std + self.mean
-
-    def __repr__(self):
-        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
-
-
 class Augmentation:
-    def __init__(self, device='cuda'):
-        self.displacement = transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomAffine(0, translate=(0.1, 0.1), scale=(0.9, 0.9)),
-            transforms.RandomRotation(45),
-        ])
-        self.color_change = transforms.Compose([
-            transforms.ColorJitter(0.1, 0.1),
-            transforms.RandomApply([_AddGaussianNoise(0., 0.05, device)])
-        ])
-        self.augmentation = transforms.Compose([
-            self.displacement,
-            self.color_change
+    def __init__(self, with_mask=False):
+        keys = ['image', 'mask'] if with_mask else ['image']
+        self.augmentation = Compose([
+            RandFlipD(prob=0.5, spatial_axis=0, keys=keys),
+            RandAffineD(prob=0.5, rotate_range=(deg2rad(45), deg2rad(45)), translate_range=(0.1, 0.1), scale_range=(0.1, 0.1), keys=keys),
+            RandGaussianNoiseD(prob=0.5, keys=['image'])
         ])
 
     def __call__(self, image, mask=None):
-        seed = np.random.randint(123456789)  # make a seed with numpy generator
-        random.seed(seed)  # apply this seed to img tranfsorms
-        torch.manual_seed(seed)
-
-        image = self.augmentation(image)
-
-        if mask is not None:
-            random.seed(seed)  # apply this seed to target tranfsorms
-            torch.manual_seed(seed)
-            mask = self.displacement(mask)
-            return image, mask
+        if mask:
+            x = {'image': image, 'mask': mask}
         else:
-            return image
+            x = {'image': image}
+
+        x = self.augmentation(x)
+        if mask:
+            return x['image'], x['mask']
+        else:
+            return x['image']

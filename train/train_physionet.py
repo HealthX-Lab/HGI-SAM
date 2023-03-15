@@ -6,7 +6,7 @@ from utils.dataset import PhysioNetICHDataset, physio_collate_image_mask
 from torch.utils.data import DataLoader, Subset
 from torch.optim import AdamW
 from models.unet import UNet
-from utils.train import train_one_epoch_segmentation
+from utils.trainer import train_one_epoch_segmentation
 from utils.preprocessing import get_transform
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.preprocessing import LabelEncoder

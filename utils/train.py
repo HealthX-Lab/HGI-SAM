@@ -1,7 +1,7 @@
 import torch.optim
 from utils import *
 from tqdm import tqdm
-from preprocessing import Augmentation
+from utils.preprocessing import Augmentation
 
 
 def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, loss_fn, train_loader, valid_loader, device='cuda'):

@@ -1,7 +1,11 @@
 import argparse
 import json
+
+import numpy as np
+
 from utils.dataset import rsna_train_valid_split, RSNAICHDataset, rsna_collate_binary_label
 from utils.preprocessing import get_transform, Augmentation
+from utils.preprocessing import *
 from utils.utils import *
 from utils.train import train_one_epoch
 from torch.utils.data import DataLoader, WeightedRandomSampler
@@ -33,7 +37,7 @@ def main():
     in_ch = config_dict["in_ch"]
     num_classes = config_dict["num_classes"]
 
-    t_x, t_y, v_x, v_y = rsna_train_valid_split(data_path, validation_size=validation_ratio)
+    t_x, t_y, v_x, v_y = rsna_train_valid_split(data_path, validation_size=validation_ratio, override=True)
     windows = [(80, 200), (600, 2800)]
     transform = get_transform(384)
 
@@ -46,15 +50,21 @@ def main():
 
     train_sampler = None
     if do_sampling:
-        labels_counts = Counter(train_ds.labels)
-        target_list = torch.tensor(train_ds.labels)
+        _labels = train_ds.labels
+        _labels = _labels[:, -1]
+        labels_counts = Counter(_labels)
+        target_list = torch.LongTensor(_labels)
         weights = torch.FloatTensor([1 / labels_counts[0], 1 / labels_counts[1]]) * (labels_counts[0] + labels_counts[1])
         class_weights = weights[target_list]
         train_sampler = WeightedRandomSampler(class_weights, len(class_weights), replacement=True)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, shuffle=True, collate_fn=rsna_collate_binary_label, sampler=train_sampler)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label, sampler=train_sampler)
     valid_loader = DataLoader(validation_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label)
 
+    for n, (i, j) in enumerate(train_loader):
+        print(i.shape, j.shape, j)
+        if n > 10:
+            return
     model = SwinWeak(in_ch, num_classes)
     checkpoint_name = model.__class__.__name__
     num_params = sum(p.numel() for p in model.parameters()) / 1e6

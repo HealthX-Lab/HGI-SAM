@@ -2,7 +2,7 @@ import os
 from torch.utils.data import Dataset
 import torch
 import pandas as pd
-from preprocessing import window_image
+from utils.preprocessing import window_image
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 import nibabel
@@ -157,8 +157,8 @@ def rsna_train_valid_split(root_dir: str, validation_size=0.05, random_state=42,
        we save the split into files for faster computation and further requirements
     """
     SUBTYPES = ["epidural", "intraparenchymal", "intraventricular", "subarachnoid", "subdural", "any"]
-    train_file_split_path, validation_file_split_path = os.path.join(root_dir, 'train_file_split'), os.path.join(root_dir, 'validation_file_split')
-    train_label_split_path, validation_label_split_path = os.path.join(root_dir, 'train_label_split'), os.path.join(root_dir, 'validation_label_split')
+    train_file_split_path, validation_file_split_path = os.path.join(root_dir, 'train_file_split.pt'), os.path.join(root_dir, 'validation_file_split.pt')
+    train_label_split_path, validation_label_split_path = os.path.join(root_dir, 'train_label_split.pt'), os.path.join(root_dir, 'validation_label_split.pt')
     if os.path.isfile(train_file_split_path) and os.path.isfile(validation_file_split_path) and os.path.isfile(train_label_split_path) and os.path.isfile(validation_label_split_path) and not override:
         with open(train_file_split_path, "rb") as tf, open(train_label_split_path, "rb") as tl, open(validation_file_split_path, "rb") as vf, open(validation_label_split_path, "rb") as vl:
             return pickle.load(tf), pickle.load(tl), pickle.load(vf), pickle.load(vl)
@@ -186,7 +186,7 @@ def rsna_train_valid_split(root_dir: str, validation_size=0.05, random_state=42,
     for filename in pbar:
         labels.append([float(labels_dict[key]) for key in [filename.split('.')[0] + "_" + x for x in SUBTYPES]])
 
-    labels = np.array(labels)
+    labels = np.array(labels).astype(np.long)
 
     train_filenames, validation_filenames, train_labels, validation_labels = train_test_split(total_filenames, labels, test_size=validation_size, random_state=random_state)
     with open(train_file_split_path, "wb") as tf, open(train_label_split_path, "wb") as tl, open(validation_file_split_path, "wb") as vf, open(validation_label_split_path, "wb") as vl:

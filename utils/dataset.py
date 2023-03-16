@@ -14,7 +14,7 @@ from torchvision.transforms.functional import rotate
 
 
 class RSNAICHDataset(Dataset):
-    def __init__(self, root_dir, filenames, labels, windows=None, transform=None):
+    def __init__(self, root_dir, filenames, labels, windows=None, transform=None, augmentation=None):
         """
         Specific pytorch dataset designed for RSNA ICH dataset
         """
@@ -22,6 +22,7 @@ class RSNAICHDataset(Dataset):
         self.filenames = filenames
         self.labels = labels
         self.transform = transform
+        self.augmentation = augmentation
         self.windows = windows
 
     def __len__(self):
@@ -45,6 +46,9 @@ class RSNAICHDataset(Dataset):
 
         if self.transform is not None:
             image = self.transform(image)
+
+        if self.augmentation:
+            image = self.augmentation(image)
 
         return image, label
 

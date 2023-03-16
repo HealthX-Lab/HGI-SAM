@@ -1,6 +1,5 @@
 from utils.utils import *
 import timm
-from models.unet import ConvBlock
 from torchvision.transforms import GaussianBlur
 from collections import OrderedDict
 
@@ -8,26 +7,18 @@ from collections import OrderedDict
 class SwinWeak(nn.Module):
     def __init__(self, in_ch, num_classes):
         super().__init__()
-        self.swin_encoder = timm.models.swin_base_patch4_window12_384(in_chans=in_ch, num_classes=num_classes)
+        self.swin = timm.models.swin_base_patch4_window12_384(in_chans=in_ch, num_classes=num_classes)
 
         self.attentions = OrderedDict()
-        for ln, layer in enumerate(self.swin_encoder.layers):
+        for ln, layer in enumerate(self.swin.layers):
             for bn, block in enumerate(layer.blocks):
                 block.attn.softmax.register_forward_hook(get_attentions(self.attentions, f'{ln}_{bn}'))
 
-        self.head = Head(1024, num_classes)
         self.gaussian_blur = GaussianBlur(9, 2)
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
-        x = self.swin_encoder.forward_features(x)
-
-        b, hw, ch = x.shape
-        h = w = int(np.sqrt(hw))
-        x = x.reshape(b, h, w, ch)  # b, h, w, ch
-        x = x.permute(0, 3, 1, 2)  # b, ch, h, w
-
-        return self.head(x)
+        return self.swin(x)
 
     def segmentation(self, x):
         y = self.forward(x)
@@ -47,20 +38,6 @@ class SwinWeak(nn.Module):
 
     def blur_brain_window(self, x):
         return self.gaussian_blur(x[:, 0, :, :])
-
-
-class Head(nn.Module):
-    def __init__(self, in_ch, num_classes):
-        super().__init__()
-        self.head = nn.Sequential(ConvBlock(in_ch, 128, 3),
-                                  nn.Flatten(1),
-                                  nn.Linear(12 * 12 * 128, 128),
-                                  nn.BatchNorm1d(128),
-                                  nn.Dropout(0.2),
-                                  nn.Linear(128, num_classes))
-
-    def forward(self, x):
-        return self.head(x)
 
 
 def window_reverse(windows, window_size: int, H: int, W: int):

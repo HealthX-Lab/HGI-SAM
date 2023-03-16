@@ -35,7 +35,7 @@ class Augmentation:
         keys = ['image', 'mask'] if with_mask else ['image']
         self.augmentation = Compose([
             RandFlipD(prob=0.5, spatial_axis=0, keys=keys),
-            RandAffineD(prob=0.5, rotate_range=(deg2rad(45), deg2rad(45)), translate_range=(0.1, 0.1), scale_range=(0.1, 0.1), keys=keys),
+            RandAffineD(prob=0.5, rotate_range=(deg2rad(45), deg2rad(45)), translate_range=(0.1, 0.1), scale_range=(0.1, 0.1), padding_mode='zeros', keys=keys),
             RandGaussianNoiseD(prob=0.5, keys=['image'])
         ])
 

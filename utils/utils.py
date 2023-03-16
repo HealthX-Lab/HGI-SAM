@@ -28,8 +28,8 @@ class ConfusionMatrix:
         self.hausdorff_distances = []
 
     def add_prediction(self, pred, gt):
-        self.predictions.extend(list(pred))
-        self.ground_truth.extend(list(gt))
+        self.predictions.extend(list(pred.detach()))
+        self.ground_truth.extend(list(gt.detach()))
         self.add_number_of_samples(len(gt))
 
     def add_number_of_samples(self, new_samples):
@@ -294,6 +294,7 @@ def show_image(window_name, image):
 
 def str_to_bool(string):
     return True if string == "True" else False
+
 
 def visualize_losses(train_losses, valid_losses):
     fig, axes = plt.subplots(2)

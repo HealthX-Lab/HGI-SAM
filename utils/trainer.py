@@ -1,7 +1,6 @@
 import torch.optim
-from utils import *
+from utils.utils import *
 from tqdm import tqdm
-from utils.preprocessing import Augmentation
 
 
 def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, loss_fn, train_loader, valid_loader, device='cuda'):
@@ -13,7 +12,7 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
 
     for i, (sample, label) in pbar_train:
         optimizer.zero_grad()
-        sample, label = augmentation(sample.to(device)), label.to(device)
+        sample, label = sample.to(device), label.to(device)
 
         pred = model(sample)
         loss = loss_fn(pred, label)

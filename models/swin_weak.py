@@ -7,7 +7,7 @@ from collections import OrderedDict
 class SwinWeak(nn.Module):
     def __init__(self, in_ch, num_classes):
         super().__init__()
-        self.swin = timm.models.swin_base_patch4_window12_384(in_chans=in_ch, num_classes=num_classes)
+        self.swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=in_ch, num_classes=num_classes, pretrained=True)
 
         self.attentions = OrderedDict()
         for ln, layer in enumerate(self.swin.layers):

@@ -57,7 +57,7 @@ def main():
         target_list = torch.LongTensor(_labels)
         weights = torch.FloatTensor([1 / labels_counts[0], 1 / labels_counts[1]]) * (labels_counts[0] + labels_counts[1])
         class_weights = weights[target_list]
-        train_sampler = WeightedRandomSampler(class_weights, len(class_weights), replacement=True)
+        train_sampler = WeightedRandomSampler(class_weights, 2 * labels_counts[1], replacement=False)
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label, sampler=train_sampler)
     valid_loader = DataLoader(validation_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label)
@@ -73,7 +73,7 @@ def main():
     checkpoint_name = model.__class__.__name__
     num_params = sum(p.numel() for p in model.parameters()) / 1e6
     print("model: ", checkpoint_name, " num-params:", num_params)
-    loss_fn = nn.BCEWithLogitsLoss()
+    loss_fn = nn.CrossEntropyLoss()
 
     opt = AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
     early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, f"weights/{checkpoint_name}.pt"))

@@ -36,7 +36,7 @@ class RSNAICHDataset(Dataset):
 
         image, default_window_params = _read_image_2d(image_path)  # x, y
         window_center, window_width, window_intercept, window_slope = default_window_params
-        label = torch.FloatTensor(self.labels[item])
+        label = torch.LongTensor(self.labels[item])
 
         default_window = _get_image_windows(image, [(window_center, window_width)], window_intercept, window_slope)
         if self.windows is not None:
@@ -144,7 +144,7 @@ def physio_collate_image_label(batch):
 def rsna_collate_binary_label(batch):
     data = torch.stack([item[0] for item in batch])
     target = torch.stack([item[1] for item in batch])
-    target = target[:, -1:]
+    target = target[:, -1]
     return [data, target]
 
 

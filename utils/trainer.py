@@ -1,6 +1,7 @@
 import torch.optim
 from utils.utils import *
 from tqdm import tqdm
+import torch.nn.functional as F
 
 
 def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, loss_fn, train_loader, valid_loader, device='cuda'):
@@ -15,6 +16,7 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
         sample, label = sample.to(device), label.to(device)
 
         pred = model(sample)
+        pred = F.softmax(pred, dim=1)
         loss = loss_fn(pred, label)
         loss.backward()
         optimizer.step()

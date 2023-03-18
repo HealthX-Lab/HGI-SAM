@@ -3,15 +3,15 @@
 
   "img_size": 384,
   "in_ch": 3,
-  "num_classes": 1,
+  "num_classes": 2,
 
   "epochs": -1,
   "batch_size": 16,
   "num_workers": 4,
-  "lr": 0.001,
+  "lr": 1e-5,
   "do_augmentation": "True",
   "do_sampling": "True",
-  "validation_ratio": 0.05,
+  "validation_ratio": 0.1,
 
   "data_path": "C:\\rsna-ich",
   "extra_path": "extra\\"

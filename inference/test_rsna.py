@@ -1,6 +1,8 @@
 import numpy as np
 import os
 
+import torch
+
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from utils.dataset import *
 from utils.preprocessing import get_transform
@@ -16,7 +18,7 @@ import numpy as np
 def main():
     physio_path = "C:\\physio-ich"
     rsna_path = "C:\\rsna-ich"
-    # ds = PhysioNetICHDataset(physio_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
+    ds = PhysioNetICHDataset(physio_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
 
     t_x, t_y, v_x, v_y = rsna_train_valid_split(rsna_path)
     windows = [(80, 200), (600, 2800)]
@@ -25,11 +27,13 @@ def main():
     train_ds = RSNAICHDataset(rsna_path, t_x, t_y, windows=windows, transform=transform)
     validation_ds = RSNAICHDataset(rsna_path, v_x, v_y, windows=windows, transform=transform)
 
-    model = SwinWeak(3, 1)
-    load_model(model.swin, r"C:\rsna-ich\Good weights\backup\Focal-100-checkpoint-0.pt")
-    for x, y in train_ds:
+    model = SwinWeak(3, 2)
+    # load_model(model.swin, r"C:\rsna-ich\Good weights\backup\Focal-100-checkpoint-0.pt")
+    load_model(model, r"extra/weights/SwinWeak.pt")
+    for x, m, y in ds:
         if y[-1] == 1:
             p, p_mask = model.segmentation(x.unsqueeze(0))
+            print(torch.argmax(p, dim=1))
             img = np.array(x.permute(1, 2, 0))
             p_mask = binarization_simple_thresholding(p_mask, 0.07)
             # p_mask = (p_mask - p_mask.min()) / (p_mask.max() - p_mask.min())
@@ -55,7 +59,7 @@ def main():
             # print(map.shape, map.dtype, map.min(), map.max())
 
             cv2.imshow('image', img)
-            # cv2.imshow('mask', m.numpy())
+            cv2.imshow('mask', m.numpy())
             cv2.imshow('pred', p_mask[0].numpy())
             # cv2.imshow('crf', map)
             cv2.waitKey()

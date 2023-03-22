@@ -97,7 +97,7 @@ def test_physionet(model, test_loader, weak_model=False, threshold=0.5, device="
             if not label.any():
                 continue
             if weak_model:
-                pred, pred_mask = model.segmentation(image)
+                pred, pred_mask = model.attentional_segmentation(image)
             else:
                 pred_mask = model(image)
                 pred_mask = torch.sigmoid(pred_mask).squeeze(1)

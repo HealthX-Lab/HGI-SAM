@@ -1,7 +1,10 @@
+import torch
+
 from utils.utils import *
 import timm
 from torchvision.transforms import GaussianBlur
 from collections import OrderedDict
+from models.unet import UNet
 
 
 class SwinWeak(nn.Module):
@@ -17,10 +20,12 @@ class SwinWeak(nn.Module):
         self.gaussian_blur = GaussianBlur(9, 2)
         self.softmax = nn.Softmax(dim=1)
 
+        self.refinement_unet = UNet(in_ch, num_classes, embed_dims=[24, 48, 96, 192])
+
     def forward(self, x):
         return self.swin(x)
 
-    def segmentation(self, x):
+    def attentional_segmentation(self, x):
         y = self.forward(x)
 
         x = self.blur_brain_window(x)
@@ -38,6 +43,11 @@ class SwinWeak(nn.Module):
 
     def blur_brain_window(self, x):
         return self.gaussian_blur(x[:, 0, :, :])
+
+    def refinement_segmentation(self, x):
+        with torch.no_grad():
+            attention_guided_mask = self.attentional_segmentation(x)
+        return self.refinement_unet(x), attention_guided_mask
 
 
 def window_reverse(windows, window_size: int, H: int, W: int):

@@ -30,7 +30,6 @@ def main():
     lr = config_dict["lr"]
     do_augmentation = str_to_bool(config_dict["do_augmentation"])
     do_sampling = str_to_bool(config_dict["do_sampling"])
-    validation_ratio = config_dict["validation_ratio"]
     data_path = config_dict["data_path"]
     extra_path = config_dict["extra_path"]
 
@@ -38,7 +37,7 @@ def main():
     in_ch = config_dict["in_ch"]
     num_classes = config_dict["num_classes"]
 
-    t_x, t_y, v_x, v_y = rsna_train_valid_split(data_path, validation_size=validation_ratio, override=False)
+    t_x, t_y, v_x, v_y = rsna_train_valid_split(data_path, override=False)
     windows = [(80, 200), (600, 2800)]
     transform = get_transform(img_size)
 

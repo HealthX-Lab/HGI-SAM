@@ -109,30 +109,6 @@ class ConfusionMatrix:
         return np.array(scores)
 
 
-class FocalLoss(nn.Module):
-    def __init__(self, gamma=2, alpha=0.5, reduction='mean'):
-        super().__init__()
-        self.gamma = gamma
-        self.alpha = alpha
-        self.reduction = reduction
-
-    def forward(self, inputs, targets):
-        p = torch.sigmoid(inputs)
-        ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
-
-        p_t = p * targets + (1 - p) * (1 - targets)
-        alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
-
-        loss = alpha_t * ce_loss * ((1 - p_t) ** self.gamma)
-
-        if self.reduction == 'sum':
-            loss = loss.sum()
-        else:
-            loss = loss.mean()
-
-        return loss
-
-
 class DiceLoss(nn.Module):
     def __init__(self):
         super(DiceLoss, self).__init__()
@@ -161,35 +137,6 @@ class DiceBCELoss(nn.Module):
         Dice_BCE = BCE + dice_loss
 
         return Dice_BCE
-
-
-class FocalDiceBCELoss(nn.Module):
-    def __init__(self, gamma=2, alpha=0.5, reduction='mean'):
-        super().__init__()
-        self.dice = DiceLoss()
-        self.focal_bce = FocalLoss(gamma, alpha, reduction)
-
-    def forward(self, inputs, targets, smooth=1):
-        dice_loss = self.dice(inputs, targets, smooth)
-        BCE = F.binary_cross_entropy_with_logits(inputs, targets, reduction='mean')
-        focal_BCE = self.focal_bce(inputs, targets)
-        Dice_Focal_BCE = BCE + dice_loss + focal_BCE
-
-        return Dice_Focal_BCE
-
-
-class FocalDiceLoss(nn.Module):
-    def __init__(self, gamma=2, alpha=0.5, reduction='mean'):
-        super().__init__()
-        self.dice = DiceLoss()
-        self.focal_bce = FocalLoss(gamma, alpha, reduction)
-
-    def forward(self, inputs, targets, smooth=1):
-        dice_loss = self.dice(inputs, targets, smooth)
-        focal_BCE = self.focal_bce(inputs, targets)
-        Dice_Focal_BCE = dice_loss + focal_BCE
-
-        return Dice_Focal_BCE
 
 
 class EarlyStopping:

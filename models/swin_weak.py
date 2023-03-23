@@ -20,7 +20,7 @@ class SwinWeak(nn.Module):
         self.gaussian_blur = GaussianBlur(9, 2)
         self.softmax = nn.Softmax(dim=1)
 
-        self.refinement_unet = UNet(in_ch, num_classes, embed_dims=[24, 48, 96, 192])
+        self.refinement_unet = UNet(in_ch, 2, embed_dims=[24, 48, 96, 192])
 
     def forward(self, x):
         return self.swin(x)
@@ -45,9 +45,7 @@ class SwinWeak(nn.Module):
         return self.gaussian_blur(x[:, 0, :, :])
 
     def refinement_segmentation(self, x):
-        with torch.no_grad():
-            attention_guided_mask = self.attentional_segmentation(x)
-        return self.refinement_unet(x), attention_guided_mask
+        return self.refinement_unet(x)
 
 
 def window_reverse(windows, window_size: int, H: int, W: int):

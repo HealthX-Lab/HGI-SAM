@@ -7,6 +7,7 @@ from sklearn import metrics
 from skimage.filters import threshold_otsu
 from monai.metrics.utils import get_mask_edges, get_surface_distance
 import matplotlib.pyplot as plt
+from utils.losses import GeneralizedDice, CrossEntropy
 
 
 class ConfusionMatrix:
@@ -109,34 +110,17 @@ class ConfusionMatrix:
         return np.array(scores)
 
 
-class DiceLoss(nn.Module):
-    def __init__(self):
-        super(DiceLoss, self).__init__()
+class DiceCELoss(nn.Module):
+    def __init__(self, alpha=0.5):
+        super().__init__()
+        assert alpha <= 1
+        self.ce_loss = CrossEntropy(idc=[0, 1])
+        self.dice_loss = GeneralizedDice(idc=[0, 1])
+        self.alpha = alpha
 
-    def forward(self, inputs, targets, smooth=1):
-        inputs = torch.sigmoid(inputs)
-
-        # flatten label and prediction tensors
-        inputs = inputs.view(-1)
-        targets = targets.view(-1)
-
-        intersection = (inputs * targets).sum()
-        dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
-
-        return 1 - dice
-
-
-class DiceBCELoss(nn.Module):
-    def __init__(self):
-        super(DiceBCELoss, self).__init__()
-        self.dice = DiceLoss()
-
-    def forward(self, inputs, targets, smooth=1):
-        dice_loss = self.dice(inputs, targets, smooth)
-        BCE = F.binary_cross_entropy_with_logits(inputs, targets, reduction='mean')
-        Dice_BCE = BCE + dice_loss
-
-        return Dice_BCE
+    def forward(self, pred_mask, target_mask):
+        pred_mask = F.softmax(pred_mask, dim=1)
+        return self.alpha * self.ce_loss(pred_mask, target_mask) + (1 - self.alpha) * self.dice_loss(pred_mask, target_mask)
 
 
 class EarlyStopping:

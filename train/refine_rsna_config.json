@@ -1,19 +1,18 @@
 {
   "model": "swinunetr",
-  "img_size": 64,
-  "in_ch": 1,
-  "num_classes": 2,
+
+  "img_size": 384,
+  "in_ch": 3,
+  "num_classes": 1,
 
   "epochs": -1,
-  "batch_size": 12,
+  "batch_size": 24,
   "num_workers": 4,
-  "lr": 0.001,
+  "lr": 1e-3,
   "do_augmentation": "True",
   "do_sampling": "True",
   "validation_ratio": 0.05,
 
-  "embed_dims": [24, 48, 96, 192],
-
-  "data_path": "C:\\physio-ich",
+  "data_path": "C:\\rsna-ich",
   "extra_path": "extra\\"
 }

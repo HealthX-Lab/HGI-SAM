@@ -6,9 +6,9 @@
   "num_classes": 1,
 
   "epochs": -1,
-  "batch_size": 24,
+  "batch_size": 16,
   "num_workers": 4,
-  "lr": 1e-3,
+  "lr": 0.001,
   "do_augmentation": "True",
   "do_sampling": "True",
   "validation_ratio": 0.05,

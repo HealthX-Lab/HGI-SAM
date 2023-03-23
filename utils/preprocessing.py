@@ -13,7 +13,7 @@ def window_image(image, window_params, intercept, slope, rescale=True):
 
     image = image * slope + intercept
     image[image < img_min] = img_min
-    image[image > img_max] = img_max
+    image[image > img_max] = img_min
 
     if rescale and (image.max() - image.min()) > 0:
         image = (image - image.min()) / (image.max() - image.min())

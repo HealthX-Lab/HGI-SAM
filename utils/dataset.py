@@ -11,6 +11,7 @@ import numpy as np
 import csv
 import pydicom
 from torchvision.transforms.functional import rotate
+from monai.transforms import NormalizeIntensity
 
 
 class RSNAICHDataset(Dataset):
@@ -24,6 +25,7 @@ class RSNAICHDataset(Dataset):
         self.transform = transform
         self.augmentation = augmentation
         self.windows = windows
+        self.normalize = NormalizeIntensity(channel_wise=True)
 
     def __len__(self):
         return len(self.filenames)
@@ -50,7 +52,7 @@ class RSNAICHDataset(Dataset):
         if self.augmentation:
             image = self.augmentation(image)
 
-        return image, label
+        return self.normalize(image), label
 
 
 class PhysioNetICHDataset(Dataset):
@@ -68,6 +70,7 @@ class PhysioNetICHDataset(Dataset):
         self.labels = []
         self.transform = transform
         self.windows = windows
+        self.normalize = NormalizeIntensity(channel_wise=True)
 
         self.labels_path = os.path.join(root_dir, 'hemorrhage_diagnosis_raw_ct.csv')
         self.read_dataset()
@@ -124,7 +127,7 @@ class PhysioNetICHDataset(Dataset):
             image = self.transform(image)
             mask = self.transform(mask.unsqueeze(0)).squeeze()
 
-        return image, mask, label
+        return self.normalize(image), mask, label
 
 
 def physio_collate_image_mask(batch):

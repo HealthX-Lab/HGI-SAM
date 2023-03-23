@@ -62,12 +62,15 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label, sampler=train_sampler)
     valid_loader = DataLoader(validation_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label)
 
-    # for i, (x, y) in enumerate(train_loader):
-    #     z = x[0].permute(1, 2, 0)
-    #     cv2.imshow('img', z.numpy())
-    #     cv2.waitKey()
-    #     if i > 100:
-    #         return
+    for i, (x, y) in enumerate(train_loader):
+        if y[0] == 0:
+            continue
+        z = x[0].permute(1, 2, 0)
+        z = (z - z.min()) / (z.max() - z.min())
+        cv2.imshow('img', z.numpy())
+        cv2.waitKey()
+        if i > 100:
+            return
 
     model = SwinWeak(in_ch, num_classes)
     loss_fn = nn.CrossEntropyLoss()

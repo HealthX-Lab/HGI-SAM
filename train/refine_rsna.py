@@ -51,8 +51,8 @@ def main():
     windows = [(80, 200), (600, 2800)]
     transform = get_transform(img_size)
 
-    train_ds = RSNAICHDataset(data_path, t_x_pos, t_y_pos, windows=windows, transform=transform)
-    validation_ds = RSNAICHDataset(data_path, v_x_pos, v_y_pos, windows=windows, transform=transform)
+    train_ds = RSNAICHDataset(data_path, t_x_pos[:100], t_y_pos[:100], windows=windows, transform=transform)
+    validation_ds = RSNAICHDataset(data_path, v_x_pos[:10], v_y_pos[:10], windows=windows, transform=transform)
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label)
     valid_loader = DataLoader(validation_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label)

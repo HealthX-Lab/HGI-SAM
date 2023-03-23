@@ -7,7 +7,7 @@ from sklearn import metrics
 from skimage.filters import threshold_otsu
 from monai.metrics.utils import get_mask_edges, get_surface_distance
 import matplotlib.pyplot as plt
-from utils.losses import GeneralizedDice, CrossEntropy
+from utils.losses import GeneralizedDice, CrossEntropy, DiceLoss
 
 
 class ConfusionMatrix:
@@ -115,7 +115,7 @@ class DiceCELoss(nn.Module):
         super().__init__()
         assert alpha <= 1
         self.ce_loss = CrossEntropy(idc=[0, 1])
-        self.dice_loss = GeneralizedDice(idc=[0, 1])
+        self.dice_loss = DiceLoss(idc=[0, 1])
         self.alpha = alpha
 
     def forward(self, pred_mask, target_mask):

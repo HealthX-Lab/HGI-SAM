@@ -46,8 +46,8 @@ def main():
     if do_augmentation:
         augmentation = Augmentation(with_mask=False)
 
-    train_ds = RSNAICHDataset(data_path, t_x, t_y, windows=windows, transform=transform, augmentation=augmentation)
-    validation_ds = RSNAICHDataset(data_path, v_x, v_y, windows=windows, transform=transform)
+    train_ds = RSNAICHDataset(data_path, t_x[:100], t_y[:100], windows=windows, transform=transform, augmentation=augmentation)
+    validation_ds = RSNAICHDataset(data_path, v_x[:100], v_y[:100], windows=windows, transform=transform)
 
     train_sampler = None
     if do_sampling:
@@ -62,18 +62,20 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label, sampler=train_sampler)
     valid_loader = DataLoader(validation_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label)
 
-    for i, (x, y) in enumerate(train_loader):
-        if y[0] == 0:
-            continue
-        z = x[0].permute(1, 2, 0)
-        z = (z - z.min()) / (z.max() - z.min())
-        cv2.imshow('img', z.numpy())
-        cv2.waitKey()
-        if i > 100:
-            return
+    # for i, (x, y) in enumerate(train_loader):
+    #     if y[0] == 0:
+    #         continue
+    #     z = x[0].permute(1, 2, 0)
+    #     z[:, :, 0] = (z[:, :, 0] - z[:, :, 0].min()) / (z[:, :, 0].max() - z[:, :, 0].min())
+    #     z[:, :, 1] = (z[:, :, 1] - z[:, :, 1].min()) / (z[:, :, 1].max() - z[:, :, 1].min())
+    #     z[:, :, 2] = (z[:, :, 2] - z[:, :, 2].min()) / (z[:, :, 2].max() - z[:, :, 2].min())
+    #     cv2.imshow('img', z.numpy())
+    #     cv2.waitKey()
+    #     if i > 100:
+    #         return
 
     model = SwinWeak(in_ch, num_classes)
-    loss_fn = nn.CrossEntropyLoss()
+    loss_fn = FocalLoss(gamma=5, reduction='sum')
     checkpoint_name = model.__class__.__name__ + "_" + loss_fn.__class__.__name__
     num_params = sum(p.numel() for p in model.parameters()) / 1e6
     print("model: ", checkpoint_name, " num-params:", num_params)

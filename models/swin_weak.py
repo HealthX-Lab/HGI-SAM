@@ -5,6 +5,7 @@ import timm
 from torchvision.transforms import GaussianBlur
 from collections import OrderedDict
 from models.unet import UNet
+import cv2
 
 
 class SwinWeak(nn.Module):
@@ -13,9 +14,11 @@ class SwinWeak(nn.Module):
         self.swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=in_ch, num_classes=num_classes, pretrained=True)
 
         self.attentions = OrderedDict()
+        self.attentions_grads = OrderedDict()
         for ln, layer in enumerate(self.swin.layers):
             for bn, block in enumerate(layer.blocks):
                 block.attn.softmax.register_forward_hook(get_attentions(self.attentions, f'{ln}_{bn}'))
+                block.attn.softmax.register_backward_hook(get_attentions_grads(self.attentions_grads, f'{ln}_{bn}'))
 
         self.gaussian_blur = GaussianBlur(9, 2)
         self.softmax = nn.Softmax(dim=1)
@@ -40,6 +43,20 @@ class SwinWeak(nn.Module):
         softmax = softmax.reshape(b, h, w)
         softmax = (softmax - softmax.min()) / (softmax.max() - softmax.min())
         return y, softmax
+
+    def attentional_segmentation_grad(self, x):
+        x = self.blur_brain_window(x)
+        mask = torch.ones_like(x)
+        for i in range(4):
+            mask *= _get_layer_attention_mask(self.attentions_grads, 384, 4, 12, i, list(range(2)) if i != 2 else [16, 17], type='grad')
+        mask = mask * x
+
+        b, h, w = mask.shape
+        softmax = mask.reshape(1, -1)
+        softmax = self.softmax(softmax)
+        softmax = softmax.reshape(b, h, w)
+        softmax = (softmax - softmax.min()) / (softmax.max() - softmax.min())
+        return softmax
 
     def blur_brain_window(self, x):
         return self.gaussian_blur(x[:, 0, :, :])
@@ -71,8 +88,15 @@ def get_attentions(att_dict, layer_block):
     return hook
 
 
+def get_attentions_grads(att_dict, layer_block):
+    def hook(model, inp, out):
+        att_dict[layer_block] = out[0].detach()
+
+    return hook
+
+
 def _get_layer_attention_mask(attentions: dict, img_size: int, patch_size: int, window_size: int,
-                              layer: int, blocks: list, device='cuda'):
+                              layer: int, blocks: list, device='cuda', type='weight'):
     total_tokens = img_size // patch_size
     layer_tokens = total_tokens // (2 ** layer)
     shift_size = window_size // 2
@@ -104,4 +128,5 @@ def _get_layer_attention_mask(attentions: dict, img_size: int, patch_size: int, 
     final_mask = (final_mask - final_mask.min()) / (final_mask.max() - final_mask.min())
 
     final_mask = F.interpolate(final_mask, size=(img_size, img_size), mode='bilinear').squeeze()
+    # cv2.imshow(f'l{layer}-{type}', final_mask.squeeze().cpu().numpy())
     return final_mask

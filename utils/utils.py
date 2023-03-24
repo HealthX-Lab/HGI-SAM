@@ -232,3 +232,22 @@ def visualize_losses(train_losses, valid_losses):
     axes[0].plot(train_losses)
     axes[1].plot(valid_losses)
     plt.show()
+
+
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=2, weight=None, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.weight = weight
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        """
+        input: [N, C], float32
+        target: [N, ], int64
+        """
+        logpt = F.log_softmax(inputs, dim=1)
+        pt = torch.exp(logpt)
+        logpt = (1 - pt) ** self.gamma * logpt
+        loss = F.nll_loss(logpt, targets, self.weight, reduction=self.reduction)
+        return loss

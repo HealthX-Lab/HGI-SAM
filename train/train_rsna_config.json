@@ -6,11 +6,11 @@
   "num_classes": 2,
 
   "epochs": -1,
-  "batch_size": 24,
+  "batch_size": 16,
   "num_workers": 4,
   "lr": 1e-5,
   "do_augmentation": "True",
-  "do_sampling": "True",
+  "do_sampling": "False",
   "validation_ratio": 0.1,
 
   "data_path": "C:\\rsna-ich",

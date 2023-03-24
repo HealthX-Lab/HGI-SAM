@@ -135,12 +135,12 @@ class EarlyStopping:
         self.early_stop = False
         self.counter = 0
 
-    def __call__(self, val_loss):
+    def __call__(self, val_loss, epoch_number):
+        save_model(self.model, self.path_to_save + epoch_number + ".pt")
         if val_loss + self.gamma < self.min_loss:
             print("val loss decreased from {} to {}".format(self.min_loss, val_loss))
             self.min_loss = val_loss
             self.counter = 0
-            save_model(self.model, self.path_to_save)
         else:
             self.counter += 1
             if self.counter == self.patience:

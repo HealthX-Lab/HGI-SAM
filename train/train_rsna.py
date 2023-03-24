@@ -46,8 +46,8 @@ def main():
     if do_augmentation:
         augmentation = Augmentation(with_mask=False)
 
-    train_ds = RSNAICHDataset(data_path, t_x[:100], t_y[:100], windows=windows, transform=transform, augmentation=augmentation)
-    validation_ds = RSNAICHDataset(data_path, v_x[:100], v_y[:100], windows=windows, transform=transform)
+    train_ds = RSNAICHDataset(data_path, t_x, t_y, windows=windows, transform=transform, augmentation=augmentation)
+    validation_ds = RSNAICHDataset(data_path, v_x, v_y, windows=windows, transform=transform)
 
     train_sampler = None
     if do_sampling:
@@ -81,7 +81,7 @@ def main():
     print("model: ", checkpoint_name, " num-params:", num_params)
 
     opt = AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
-    early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, f"weights/{checkpoint_name}.pt"))
+    early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, f"weights/{checkpoint_name}"))
     epoch_number = 1
     train_losses = []
     valid_losses = []
@@ -96,7 +96,7 @@ def main():
         print(f"\nepoch {epoch_number}: train-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n"
               f"train-acc:{_metrics['train_cfm'].get_accuracy()}, valid-acc:{_metrics['valid_cfm'].get_accuracy()}\n"
               f"train-F1:{_metrics['train_cfm'].get_f1_score()}, valid-F1:{_metrics['valid_cfm'].get_f1_score()}")
-        early_stopping(val_loss)
+        early_stopping(val_loss, epoch_number)
         epoch_number += 1
 
 

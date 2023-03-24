@@ -23,7 +23,7 @@ def window_image(image, window_params, intercept, slope, rescale=True):
 
 def get_transform(image_size):
     t = transforms.Compose([
-        transforms.Resize(int(1.2 * image_size)),
+        transforms.Resize(int(1.1 * image_size)),
         transforms.CenterCrop(image_size)
     ])
 

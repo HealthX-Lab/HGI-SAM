@@ -31,16 +31,16 @@ def main():
     validation_ds = RSNAICHDataset(rsna_path, v_x, v_y, windows=windows, transform=transform)
 
     model = SwinWeak(3, 2)
-    load_model(model, r"extra/weights/SwinWeak_CrossEntropyLoss.pt")
+    load_model(model, r"extra/weights/SwinWeak_FocalLoss.pt")
     # load_model(model, r"extra/weights/SwinWeak_refined.pt")
     model.cuda()
     model.eval()
     dice = DiceMetric(include_background=False, reduction='none')
     dice2 = DiceMetric(include_background=False, reduction='none')
-    for x, y in train_ds:
+    for x, m, y in ds:
         if y[-1] == 1:
-            # x, m = x.to('cuda'), m.to('cuda')
-            x = x.to('cuda')
+            x, m = x.to('cuda'), m.to('cuda')
+            # x = x.to('cuda')
             p, p_mask = model.attentional_segmentation(x.unsqueeze(0))
             foregrounds = p[:, 1].sum()
             # foregrounds = p.sum()
@@ -59,8 +59,8 @@ def main():
             # refined_mask = torch.argmax(torch.softmax(refined_mask, dim=1), dim=1)
             # refined_mask = one_hot(refined_mask, 2, dim=0)
             #
-            # m[m > 0] = 1
-            # mask = one_hot(m.unsqueeze(0), 2, dim=0)
+            m[m > 0] = 1
+            mask = one_hot(m.unsqueeze(0), 2, dim=0)
 
             img = np.array(x.permute(1, 2, 0).cpu())
             img = (img - img.min()) / (img.max() - img.min())
@@ -95,7 +95,7 @@ def main():
             # print(compute_meandice(refined_mask.unsqueeze(0), mask.unsqueeze(0), include_background=False))
 
             cv2.imshow('image', img)
-            # cv2.imshow('mask', mask[1].cpu().numpy())
+            cv2.imshow('mask', mask[1].cpu().numpy())
             cv2.imshow('pred', p_mask[0].cpu().numpy())
             cv2.imshow('pred backward', p_mask2[0].cpu().numpy())
             # cv2.imshow('binarized', binarization_simple_thresholding(p_mask[0], 0.07).cpu().numpy())

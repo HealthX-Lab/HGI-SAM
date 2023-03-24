@@ -12,6 +12,8 @@ import csv
 import pydicom
 from torchvision.transforms.functional import rotate
 from monai.transforms import NormalizeIntensity
+from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.preprocessing import LabelEncoder
 
 
 class RSNAICHDataset(Dataset):
@@ -244,3 +246,14 @@ def _read_image_2d(file_path: str):
     window_params = _get_windowing(image)
     image = torch.FloatTensor(image.pixel_array.astype(np.float32))
     return image, window_params
+
+
+def physionet_cross_validation_split(physio_path=r"C://physio-ich", k=5):
+    ds = PhysioNetICHDataset(physio_path)
+
+    indices = np.arange(0, len(ds.labels))
+    encoded_labels = LabelEncoder().fit_transform([''.join(str(l)) for l in ds.labels])
+    skf = StratifiedKFold(k)
+    for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):  # dividing intro train/test based on all subtypes
+        with open(rf"extra/folds_division/fold{cf}.pt", 'wb') as fold_indices_file:
+            pickle.dump(test_indices, fold_indices_file)

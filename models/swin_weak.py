@@ -49,7 +49,7 @@ class SwinWeak(nn.Module):
         mask = torch.ones_like(x)
         for i in range(4):
             mask *= _get_layer_attention_mask(self.attentions_grads, 384, 4, 12, i, list(range(2)) if i != 2 else [16, 17], type='grad')
-        mask = mask * x
+        # mask = mask * x
 
         b, h, w = mask.shape
         softmax = mask.reshape(1, -1)

@@ -1,8 +1,10 @@
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 import argparse
 import json
 from utils.preprocessing import Augmentation
-from utils.utils import EarlyStopping, DiceBCELoss, ConfusionMatrix, dice_metric, hausdorff_distance, intersection_over_union, binarization_otsu, binarization_simple_thresholding, load_model
-from utils.dataset import PhysioNetICHDataset, physio_collate_image_mask
+from utils.utils import EarlyStopping, ConfusionMatrix, dice_metric, hausdorff_distance, intersection_over_union, binarization_otsu, binarization_simple_thresholding, load_model
+from utils.dataset import PhysioNetICHDataset, physio_collate_image_mask, physionet_cross_validation_split
 from torch.utils.data import DataLoader, Subset
 from torch.optim import AdamW
 from models.unet import UNet
@@ -29,6 +31,7 @@ def main():
     lr = config_dict["lr"]
     in_ch = config_dict["in_ch"]
     num_classes = config_dict["num_classes"]
+    physionet_cross_validation_split()
 
 
 def train_physionet(model: nn.Module, loss_fn, train_loader, valid_loader, checkpoint_name, cf, device='cuda'):
@@ -46,7 +49,7 @@ if __name__ == '__main__':
 
 
 def train_and_test_physionet(physio_path, model, loss_fn):
-    k = 10
+    k = 5
     device = 'cuda'
     checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__
 

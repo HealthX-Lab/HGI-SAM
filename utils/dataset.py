@@ -125,8 +125,9 @@ class PhysioNetICHDataset(Dataset):
 
         if self.transform is not None:
             image = self.transform(image)
-            mask = self.transform(mask.unsqueeze(0)).squeeze()
+            mask = self.transform(mask.unsqueeze(0))
 
+        mask[mask > 0] = 1
         return image, mask, label
 
 

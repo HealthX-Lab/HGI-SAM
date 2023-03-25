@@ -15,6 +15,7 @@ from monai.transforms.post.array import one_hot
 import numpy as np
 from monai.metrics import DiceMetric, compute_meandice
 from copy import deepcopy
+from models.unet import UNet
 
 
 def main():
@@ -30,9 +31,11 @@ def main():
     train_ds = RSNAICHDataset(rsna_path, t_x, t_y, windows=windows, transform=transform)
     validation_ds = RSNAICHDataset(rsna_path, v_x, v_y, windows=windows, transform=transform)
 
-    model = SwinWeak(3, 2)
-    load_model(model, r"extra/weights/SwinWeak_FocalLoss.pt")
+    # model = SwinWeak(3, 2)
+    # load_model(model, r"extra/weights/SwinWeak_FocalLoss.pt")
     # load_model(model, r"extra/weights/SwinWeak_refined.pt")
+    model = UNet(3, 2, [24, 48, 96, 192])
+    load_model(model, r'D:\Projects\MELBA\extra\weights\UNet-DiceCELoss-fold0-36.pt')
     model.cuda()
     model.eval()
     dice = DiceMetric(include_background=False, reduction='none')
@@ -41,11 +44,14 @@ def main():
         if y[-1] == 1:
             x, m = x.to('cuda'), m.to('cuda')
             # x = x.to('cuda')
-            p, p_mask = model.attentional_segmentation(x.unsqueeze(0))
-            foregrounds = p[:, 1].sum()
+            # p, p_mask = model.attentional_segmentation(x.unsqueeze(0))
+            p_mask = model(x.unsqueeze(0))
+            p_mask = torch.softmax(p_mask, dim=1)
+            p_mask = p_mask.detach()
+            # foregrounds = p[:, 1].sum()
             # foregrounds = p.sum()
-            foregrounds.backward()
-            p_mask2 = model.attentional_segmentation_grad(x.unsqueeze(0))
+            # foregrounds.backward()
+            # p_mask2 = model.attentional_segmentation_grad(x.unsqueeze(0))
             # print(p_mask.shape)
             # bin_p_mask = np.array(p_mask.squeeze().cpu() * 256).astype(np.uint8)
             # th3 = cv2.adaptiveThreshold(bin_p_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
@@ -59,8 +65,7 @@ def main():
             # refined_mask = torch.argmax(torch.softmax(refined_mask, dim=1), dim=1)
             # refined_mask = one_hot(refined_mask, 2, dim=0)
             #
-            m[m > 0] = 1
-            mask = one_hot(m.unsqueeze(0), 2, dim=0)
+            mask = one_hot(m, 2, dim=0)
 
             img = np.array(x.permute(1, 2, 0).cpu())
             img = (img - img.min()) / (img.max() - img.min())
@@ -96,8 +101,8 @@ def main():
 
             cv2.imshow('image', img)
             cv2.imshow('mask', mask[1].cpu().numpy())
-            cv2.imshow('pred', p_mask[0].cpu().numpy())
-            cv2.imshow('pred backward', p_mask2[0].cpu().numpy())
+            cv2.imshow('pred', p_mask[0, 1].cpu().numpy())
+            # cv2.imshow('pred backward', p_mask2[0].cpu().numpy())
             # cv2.imshow('binarized', binarization_simple_thresholding(p_mask[0], 0.07).cpu().numpy())
             # cv2.imshow('adaptive', th3)
             # cv2.imshow('refined pred', refined_mask[1].cpu().numpy())

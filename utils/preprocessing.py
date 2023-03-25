@@ -40,13 +40,13 @@ class Augmentation:
         ])
 
     def __call__(self, image, mask=None):
-        if mask:
+        if mask is not None:
             x = {'image': image, 'mask': mask}
         else:
             x = {'image': image}
 
         x = self.augmentation(x)
-        if mask:
+        if mask is not None:
             return x['image'], x['mask']
         else:
             return x['image']

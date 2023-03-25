@@ -8,6 +8,7 @@ from skimage.filters import threshold_otsu
 from monai.metrics.utils import get_mask_edges, get_surface_distance
 import matplotlib.pyplot as plt
 from utils.losses import GeneralizedDice, CrossEntropy, DiceLoss
+from monai.transforms.post.array import one_hot
 
 
 class ConfusionMatrix:
@@ -120,6 +121,7 @@ class DiceCELoss(nn.Module):
 
     def forward(self, pred_mask, target_mask):
         pred_mask = F.softmax(pred_mask, dim=1)
+        target_mask = one_hot(target_mask, 2, dim=1)
         return self.alpha * self.ce_loss(pred_mask, target_mask) + (1 - self.alpha) * self.dice_loss(pred_mask, target_mask)
 
 
@@ -136,7 +138,7 @@ class EarlyStopping:
         self.counter = 0
 
     def __call__(self, val_loss, epoch_number):
-        save_model(self.model, self.path_to_save + epoch_number + ".pt")
+        save_model(self.model, f'{self.path_to_save}-{epoch_number}.pt')
         if val_loss + self.gamma < self.min_loss:
             print("val loss decreased from {} to {}".format(self.min_loss, val_loss))
             self.min_loss = val_loss

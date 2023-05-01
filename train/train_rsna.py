@@ -75,11 +75,14 @@ def main():
     #         return
 
     model = SwinWeak(in_ch, num_classes)
-    loss_fn = FocalLoss(gamma=5, reduction='sum')
+    load_model(model, os.path.join(extra_path, 'weights/SwinWeak_CrossEntropyLoss-mlcn.pt'))
+    loss_fn = nn.CrossEntropyLoss()
     checkpoint_name = model.__class__.__name__ + "_" + loss_fn.__class__.__name__
     num_params = sum(p.numel() for p in model.parameters()) / 1e6
     print("model: ", checkpoint_name, " num-params:", num_params)
-
+    # for param in model.swin.parameters():
+    #     param.requires_grad = False
+    # opt = AdamW(model.head.parameters(), lr=lr, weight_decay=1e-6)
     opt = AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
     early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, f"weights/{checkpoint_name}"))
     epoch_number = 1
@@ -96,7 +99,7 @@ def main():
         print(f"\nepoch {epoch_number}: train-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n"
               f"train-acc:{_metrics['train_cfm'].get_accuracy()}, valid-acc:{_metrics['valid_cfm'].get_accuracy()}\n"
               f"train-F1:{_metrics['train_cfm'].get_f1_score()}, valid-F1:{_metrics['valid_cfm'].get_f1_score()}")
-        early_stopping(val_loss, epoch_number)
+        early_stopping(val_loss)
         epoch_number += 1
 
 

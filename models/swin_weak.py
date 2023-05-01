@@ -1,17 +1,23 @@
 import torch
-
+import torch.nn as nn
 from utils.utils import *
 import timm
 from torchvision.transforms import GaussianBlur
 from collections import OrderedDict
 from models.unet import UNet
 import cv2
+from pytorch_grad_cam import GradCAM
 
 
 class SwinWeak(nn.Module):
-    def __init__(self, in_ch, num_classes):
+    def __init__(self, in_ch, num_classes, mlcn=False):
         super().__init__()
-        self.swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=in_ch, num_classes=num_classes, pretrained=True)
+        self.mlcn = mlcn
+        if self.mlcn:
+            self.swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=in_ch, num_classes=num_classes)
+        else:
+            self.swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=in_ch, num_classes=-1)
+            self.head = nn.Linear(1024, num_classes)
 
         self.attentions = OrderedDict()
         self.attentions_grads = OrderedDict()
@@ -26,40 +32,46 @@ class SwinWeak(nn.Module):
         self.refinement_unet = UNet(in_ch, 2, embed_dims=[24, 48, 96, 192])
 
     def forward(self, x):
-        return self.swin(x)
+        features = self.swin(x)
+        if self.mlcn:
+            return features
+        else:
+            return self.head(features)
 
-    def attentional_segmentation(self, x):
-        y = self.forward(x)
-
-        x = self.blur_brain_window(x)
-        mask = torch.ones_like(x)
+    def attentional_segmentation(self, brain):
+        brain = self.blur_brain_window(brain)
+        mask = torch.ones_like(brain)
         for i in range(4):
             mask *= _get_layer_attention_mask(self.attentions, 384, 4, 12, i, list(range(2)) if i != 2 else list(range(18)))
-        mask = mask * x
+        mask = mask * brain
 
-        b, h, w = mask.shape
-        softmax = mask.reshape(1, -1)
-        softmax = self.softmax(softmax)
-        softmax = softmax.reshape(b, h, w)
-        softmax = (softmax - softmax.min()) / (softmax.max() - softmax.min())
-        return y, softmax
-
-    def attentional_segmentation_grad(self, x):
-        x = self.blur_brain_window(x)
-        mask = torch.ones_like(x)
-        for i in range(4):
-            mask *= _get_layer_attention_mask(self.attentions_grads, 384, 4, 12, i, list(range(2)) if i != 2 else [16, 17], type='grad')
-        # mask = mask * x
-
-        b, h, w = mask.shape
-        softmax = mask.reshape(1, -1)
-        softmax = self.softmax(softmax)
-        softmax = softmax.reshape(b, h, w)
+        softmax = mask
         softmax = (softmax - softmax.min()) / (softmax.max() - softmax.min())
         return softmax
 
+    def attentional_segmentation_grad(self, brain):
+        brain = self.blur_brain_window(brain)
+        mask = torch.ones_like(brain)
+        for i in range(3):
+            mask *= _get_layer_attention_mask(self.attentions, 384, 4, 12, i, list(range(2)) if i != 2 else list(range(18)), type='grad', att_grad=self.attentions_grads)
+        _get_layer_attention_mask(self.attentions, 384, 4, 12, 3, list(range(2)), type='grad', att_grad=self.attentions_grads)
+        mask = mask * brain
+
+        softmax = mask
+        softmax = (softmax - softmax.min()) / (softmax.max() - softmax.min())
+        return softmax
+
+    def grad_cam_segmentation(self, x, brain):
+        gcam_layer = GradCAM(model=self, target_layers=[self.swin.layers[-1].blocks[-1].norm1], use_cuda=True, reshape_transform=reshape_transform(12, 12))
+        gcam_map = torch.tensor(gcam_layer(x), device=brain.device, dtype=brain.dtype)
+
+        gcam_map *= brain
+        gcam_map = (gcam_map - gcam_map.min()) / (gcam_map.max() - gcam_map.min())
+        # cv2.imshow(f'gcam map', gcam_map.squeeze().cpu().numpy())
+        return gcam_map
+
     def blur_brain_window(self, x):
-        return self.gaussian_blur(x[:, 0, :, :])
+        return self.gaussian_blur(x)
 
     def refinement_segmentation(self, x):
         return self.refinement_unet(x)
@@ -90,13 +102,13 @@ def get_attentions(att_dict, layer_block):
 
 def get_attentions_grads(att_dict, layer_block):
     def hook(model, inp, out):
-        att_dict[layer_block] = out[0].detach()
+        att_dict[layer_block] = inp[0].detach()
 
     return hook
 
 
 def _get_layer_attention_mask(attentions: dict, img_size: int, patch_size: int, window_size: int,
-                              layer: int, blocks: list, device='cuda', type='weight'):
+                              layer: int, blocks: list, device='cuda', type='weight', att_grad=None):
     total_tokens = img_size // patch_size
     layer_tokens = total_tokens // (2 ** layer)
     shift_size = window_size // 2
@@ -105,7 +117,13 @@ def _get_layer_attention_mask(attentions: dict, img_size: int, patch_size: int, 
     masks = []
     for block_index in blocks:
         att = attentions[f'{layer}_{block_index}']
-        att = torch.mean(att, dim=1)  # mean over heads
+        if att_grad is not None:
+            a, b, c, d = att.shape
+            weight = torch.norm(att_grad[f'{layer}_{block_index}'], dim=[2, 3])
+            weight = weight.view(a, b, 1, 1)
+            att = torch.mean(att * weight, dim=1)
+        else:
+            att = torch.mean(att, dim=1)  # mean over heads
         mask = avg_pooling(att).reshape(-1, window_size * window_size)  # pool over target sequences
 
         mask = mask.reshape(-1, window_size, window_size, 1)
@@ -121,6 +139,16 @@ def _get_layer_attention_mask(attentions: dict, img_size: int, patch_size: int, 
     for i in range(0, len(masks), 2):
         swin_block_mask = masks[i] * masks[i + 1]
         final_masks.append(swin_block_mask)
+        # if layer == 0 and type == 'grad':
+        #     a = masks[i].squeeze().cpu().numpy()
+        #     a = (a - a.min()) / (a.max() - a.min())
+        #     cv2.imshow('mask-i', a)
+        #     b = masks[i + 1].squeeze().cpu().numpy()
+        #     b = (b - b.min()) / (b.max() - b.min())
+        #     cv2.imshow('mask-i + 1', b)
+        #     multiply = a * b
+        #     multiply = (multiply - multiply.min()) / (multiply.max() - multiply.min())
+        #     cv2.imshow('mask-i * mask-i + 1', multiply)
 
     all_masks = torch.stack(final_masks)
     final_mask = torch.mean(all_masks, dim=0)

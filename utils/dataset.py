@@ -57,15 +57,17 @@ class RSNAICHDataset(Dataset):
 
 
 class PhysioNetICHDataset(Dataset):
-    def __init__(self, root_dir, windows=None, transform=None):
+    def __init__(self, root_dir, windows=None, transform=None, return_brain=False):
         """
         Specific pytorch dataset designed for PhysioNet ICH dataset
         """
         self.scans_dir = os.path.join(root_dir, 'ct_scans')
         self.masks_dir = os.path.join(root_dir, 'masks')
+        self.brains_dir = os.path.join(root_dir, 'brainmask_ero')
         self.filenames = os.listdir(self.scans_dir)
 
         self.slices = []
+        self.brains = []
         self.scans_num_slices = []
         self.masks = []
         self.labels = []
@@ -73,6 +75,7 @@ class PhysioNetICHDataset(Dataset):
         self.windows = windows
 
         self.labels_path = os.path.join(root_dir, 'hemorrhage_diagnosis_raw_ct.csv')
+        self.return_brain = return_brain
         self.read_dataset()
 
     def read_dataset(self):
@@ -94,6 +97,7 @@ class PhysioNetICHDataset(Dataset):
         for file in pbar:
             scan = _read_image_3d(os.path.join(self.scans_dir, file), do_rotate=True)
             mask = _read_image_3d(os.path.join(self.masks_dir, file), do_rotate=True)
+            brain = _read_image_3d(os.path.join(self.brains_dir, f'{file.split(".")[0]}_mask.nii.gz'), do_rotate=True)
 
             num_slices = scan.shape[-1]
             self.scans_num_slices.append(num_slices)
@@ -101,6 +105,7 @@ class PhysioNetICHDataset(Dataset):
             for i in range(num_slices):
                 self.slices.append(scan[:, :, i])
                 self.masks.append(mask[:, :, i])
+                self.brains.append(brain[:, :, i])
                 k += 1
 
     def __len__(self):
@@ -112,10 +117,13 @@ class PhysioNetICHDataset(Dataset):
 
         image = self.slices[item]
         mask = self.masks[item]
+        brain = self.brains[item]
         label = self.labels[item]
 
         if mask.max() > 0:  # change to range to 0-1
             mask = (mask - mask.min()) / (mask.max() - mask.min())
+        # if brain.max() > 0:  # change to range to 0-1
+        #     brain = (brain - brain.min()) / (brain.max() - brain.min())
 
         default_window = _get_image_windows(image, [(40, 120)], 0, 1)
         if self.windows is not None:
@@ -125,10 +133,15 @@ class PhysioNetICHDataset(Dataset):
 
         if self.transform is not None:
             image = self.transform(image)
+            brain = self.transform(brain.unsqueeze(0))
             mask = self.transform(mask.unsqueeze(0))
 
         mask[mask > 0] = 1
-        return image, mask, label
+        if self.return_brain:
+            # return image, mask, label, brain * image[0:1]
+            return image, mask, label, brain
+        else:
+            return image, mask, label
 
 
 def physio_collate_image_mask(batch):

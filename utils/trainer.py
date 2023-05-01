@@ -20,7 +20,7 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
         sample, label = sample.to(device), label.to(device)
 
         pred = model(sample)
-        # pred = F.softmax(pred, dim=1)
+        pred = F.softmax(pred, dim=1)
         loss = loss_fn(pred, label)
         loss.backward()
         optimizer.step()
@@ -39,7 +39,7 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
             sample, label = sample.to(device), label.to(device)
 
             pred = model(sample)
-            # pred = F.softmax(pred, dim=1)
+            pred = F.softmax(pred, dim=1)
             loss = loss_fn(pred, label)
 
             _metrics["valid_cfm"].add_loss(loss.item())

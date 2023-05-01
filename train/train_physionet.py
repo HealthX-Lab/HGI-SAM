@@ -48,39 +48,41 @@ def main():
         augmentation = Augmentation(with_mask=True)
 
     k = 5
-    model = UNet(in_ch=in_ch, num_classes=num_classes, embed_dims=embed_dims)
-    loss_fn = DiceCELoss()
-    checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__
-    checkpoint_path = os.path.join(extra_path, "weights", checkpoint_name)
     # physionet_cross_validation_split()
 
     ds = PhysioNetICHDataset(data_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
     all_indices = np.arange(0, len(ds.labels))
-    for cf in range(k):
+    for cf in range(4, k):
         with open(os.path.join(extra_path, "folds_division", f"fold{cf}.pt"), "rb") as test_indices_file:
             test_indices = pickle.load(test_indices_file)
-            train_valid_indices = [x for x in all_indices if x not in test_indices]
+        train_valid_indices = [x for x in all_indices if x not in test_indices]
+        train_indices, valid_indices = train_test_split(train_valid_indices, stratify=ds.labels[train_valid_indices, -1], test_size=validation_ratio, random_state=42)
 
-            train_indices, valid_indices = train_test_split(train_valid_indices, stratify=ds.labels[train_valid_indices, -1], test_size=validation_ratio, random_state=42)
+        model = UNet(in_ch=in_ch, num_classes=num_classes, embed_dims=embed_dims)
+        loss_fn = DiceCELoss()
+        checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__
+        checkpoint_path = os.path.join(extra_path, "weights", checkpoint_name)
 
-            if do_sampling:
-                _labels = ds.labels
-                _labels = _labels[:, -1]
-                labels_counts = Counter(_labels[train_indices])
-                target_list = torch.LongTensor(_labels)
-                weights = torch.FloatTensor([1 / labels_counts[0], 1 / labels_counts[1]]) * (labels_counts[0] + labels_counts[1])
-                class_weights = weights[target_list]
-                class_weights[test_indices] = 0
-                class_weights[valid_indices] = 0
-                train_sampler = WeightedRandomSampler(class_weights, len(train_indices), replacement=True)
-                train_loader = DataLoader(ds, batch_size=batch_size, collate_fn=physio_collate_image_mask, num_workers=num_workers, sampler=train_sampler)
-            else:
-                train_ds = Subset(ds, train_indices)
-                train_loader = DataLoader(train_ds, batch_size=batch_size, collate_fn=physio_collate_image_mask, num_workers=num_workers, shuffle=True)
-            valid_ds = Subset(ds, valid_indices)
-            valid_loader = DataLoader(valid_ds, batch_size=batch_size, collate_fn=physio_collate_image_mask)
+        if do_sampling:
+            _labels = ds.labels
+            _labels = _labels[:, -1]
+            labels_counts = Counter(_labels[train_indices])
+            target_list = torch.LongTensor(_labels)
+            weights = torch.FloatTensor([1 / labels_counts[0], 1 / labels_counts[1]]) * (labels_counts[0] + labels_counts[1])
+            class_weights = weights[target_list]
+            class_weights[test_indices] = 0
+            class_weights[valid_indices] = 0
+            train_sampler = WeightedRandomSampler(class_weights, len(train_indices), replacement=True)
+            train_loader = DataLoader(ds, batch_size=batch_size, collate_fn=physio_collate_image_mask, num_workers=num_workers, sampler=train_sampler)
+        else:
+            train_ds = Subset(ds, train_indices)
+            train_loader = DataLoader(train_ds, batch_size=batch_size, collate_fn=physio_collate_image_mask, num_workers=num_workers, shuffle=True)
+        valid_ds = Subset(ds, valid_indices)
+        valid_loader = DataLoader(valid_ds, batch_size=batch_size, collate_fn=physio_collate_image_mask)
 
-            train_physionet(model, lr, epochs, loss_fn, train_loader, valid_loader, checkpoint_path, cf, augmentation=augmentation)
+        train_physionet(model, lr, epochs, loss_fn, train_loader, valid_loader, checkpoint_path, cf, augmentation=augmentation)
+        del model
+        torch.cuda.empty_cache()
 
 
 def train_physionet(model: nn.Module, lr, epochs, loss_fn, train_loader, valid_loader, checkpoint_path, cf, device='cuda', augmentation=None):

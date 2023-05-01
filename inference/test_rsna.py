@@ -1,11 +1,11 @@
 import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 import torch
-from utils.dataset import *
-from utils.preprocessing import get_transform
+from helpers.dataset import *
+from helpers.preprocessing import get_transform
 from models.swin_weak import SwinWeak
 import cv2
-from utils.utils import *
+from helpers.utils import *
 import pydensecrf.densecrf as dcrf
 from pydensecrf.utils import unary_from_labels, unary_from_softmax, create_pairwise_gaussian, create_pairwise_bilateral
 import numpy as np

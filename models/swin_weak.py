@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from utils.utils import *
+from helpers.utils import *
 import timm
 from torchvision.transforms import GaussianBlur
 from collections import OrderedDict

@@ -2,14 +2,14 @@ import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 import argparse
 import json
-from utils.preprocessing import Augmentation
-from utils.utils import EarlyStopping, ConfusionMatrix, dice_metric, hausdorff_distance, intersection_over_union, binarization_otsu, binarization_simple_thresholding, load_model
-from utils.dataset import PhysioNetICHDataset, physio_collate_image_mask, physionet_cross_validation_split
+from helpers.preprocessing import Augmentation
+from helpers.utils import EarlyStopping, ConfusionMatrix, dice_metric, hausdorff_distance, intersection_over_union, binarization_otsu, binarization_simple_thresholding, load_model
+from helpers.dataset import PhysioNetICHDataset, physio_collate_image_mask, physionet_cross_validation_split
 from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 from torch.optim import AdamW
 from models.unet import UNet
-from utils.trainer import train_one_epoch_segmentation
-from utils.preprocessing import get_transform
+from helpers.trainer import train_one_epoch_segmentation
+from helpers.preprocessing import get_transform
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.preprocessing import LabelEncoder
 import numpy as np
@@ -17,7 +17,7 @@ import statistics
 import torch
 import torch.nn as nn
 import pickle
-from utils.utils import str_to_bool, visualize_losses, DiceCELoss
+from helpers.utils import str_to_bool, visualize_losses, DiceCELoss
 from collections import Counter
 
 

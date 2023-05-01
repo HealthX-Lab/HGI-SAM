@@ -6,8 +6,8 @@ import torch
 import numpy as np
 from torch import Tensor, einsum
 
-from utils.utils2 import simplex, probs2one_hot, one_hot
-from utils.utils2 import one_hot2hd_dist
+from helpers.utils2 import simplex, probs2one_hot, one_hot
+from helpers.utils2 import one_hot2hd_dist
 
 
 class CrossEntropy():

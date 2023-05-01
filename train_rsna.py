@@ -1,13 +1,13 @@
 import os
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+import sys
 import argparse
 import json
 import numpy as np
-from utils.dataset import rsna_train_valid_split, RSNAICHDataset, rsna_collate_binary_label
-from utils.preprocessing import get_transform, Augmentation
-from utils.preprocessing import *
-from utils.utils import *
-from utils.trainer import train_one_epoch
+from helpers.dataset import rsna_train_valid_split, RSNAICHDataset, rsna_collate_binary_label
+from helpers.preprocessing import get_transform, Augmentation
+from helpers.preprocessing import *
+from helpers.utils import *
+from helpers.trainer import train_one_epoch
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.optim import AdamW
 from models.swin_weak import SwinWeak
@@ -38,7 +38,8 @@ def main():
     in_ch = config_dict["in_ch"]
     num_classes = config_dict["num_classes"]
 
-    t_x, t_y, v_x, v_y = rsna_train_valid_split(data_path, validation_size=validation_ratio, override=False)
+    t_x, t_y, v_x, v_y = rsna_train_valid_split(data_path, extra_path, validation_size=validation_ratio, override=False)
+
     windows = [(80, 200), (600, 2800)]
     transform = get_transform(img_size)
 

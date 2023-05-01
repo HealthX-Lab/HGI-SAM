@@ -98,7 +98,7 @@ def batch_soft_size(a: Tensor) -> Tensor:
     return torch.einsum("bk...->k", a)[..., None]
 
 
-# Assert utils
+# Assert helpers
 def uniq(a: Tensor) -> Set:
     return set(torch.unique(a.cpu()).numpy())
 
@@ -309,7 +309,7 @@ def one_hot2hd_dist(seg: np.ndarray, resolution: Tuple[float, float, float] = No
     return res
 
 
-# Misc utils
+# Misc helpers
 def save_images(segs: Tensor, names: Iterable[str], root: str, mode: str, iter: int) -> None:
     for seg, name in zip(segs, names):
         save_path = Path(root, f"iter{iter:03d}", mode, name).with_suffix(".png")

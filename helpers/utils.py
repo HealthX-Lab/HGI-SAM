@@ -7,7 +7,7 @@ from sklearn import metrics
 from skimage.filters import threshold_otsu
 from monai.metrics.utils import get_mask_edges, get_surface_distance
 import matplotlib.pyplot as plt
-from utils.losses import GeneralizedDice, CrossEntropy, DiceLoss
+from helpers.losses import GeneralizedDice, CrossEntropy, DiceLoss
 from monai.transforms.post.array import one_hot
 
 

@@ -1,12 +1,19 @@
 from torchvision import transforms
 import torch
-import numpy as np
-import random
 from monai.transforms import Compose, RandFlipD, RandAffineD, RandGaussianNoiseD
 from numpy import deg2rad
 
 
 def window_image(image, window_params, intercept, slope, rescale=True):
+    """
+    A method to window CT image
+    :param image: image intensities of Hounsfield units
+    :param window_params: (window-center, window-width)
+    :param intercept: the intercept of window
+    :param slope: the slope of window
+    :param rescale: whether to do a 0-1 normalization at the end
+    :return: float tensor of windowed image
+    """
     center, width = window_params
     img_min = center - width // 2
     img_max = center + width // 2
@@ -22,6 +29,12 @@ def window_image(image, window_params, intercept, slope, rescale=True):
 
 
 def get_transform(image_size):
+    """
+    preprocessing transforms applied to image, which only includes resizing the image
+    to delete some parts of background, we resize it to 110% of needed size, and then we center crop the image
+    :param image_size: the size of image needed
+    :return: transformed image
+    """
     t = transforms.Compose([
         transforms.Resize(int(1.1 * image_size)),
         transforms.CenterCrop(image_size)
@@ -32,6 +45,10 @@ def get_transform(image_size):
 
 class Augmentation:
     def __init__(self, with_mask=False):
+        """
+        an Augmentation class which includes random flipping, random affine transformation, and random Gaussian noise addition.
+        :param with_mask: whether to apply the transforms on images masks as well.
+        """
         keys = ['image', 'mask'] if with_mask else ['image']
         self.augmentation = Compose([
             RandFlipD(prob=0.5, spatial_axis=1, keys=keys),

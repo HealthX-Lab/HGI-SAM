@@ -74,7 +74,6 @@ class PhysioNetICHDataset(Dataset):
         :param root_dir: path to the PhysioNet ICH root directory
         :param windows: a list of (a, b) tuples whereas a: window-center, b: window-width
         :param transform: transforms applied to the windowed image such is resizing
-        :param return_brain: whether to return brain-mask or not
         """
         self.scans_dir = os.path.join(root_dir, 'ct_scans')
         self.masks_dir = os.path.join(root_dir, 'masks')
@@ -324,7 +323,7 @@ def physionet_cross_validation_split(physio_path=r"C://physio-ich", k=5):
     ds = PhysioNetICHDataset(physio_path)
 
     indices = np.arange(0, len(ds.labels))
-    encoded_labels = LabelEncoder().fit_transform([''.join(str(l)) for l in ds.labels])
+    encoded_labels = LabelEncoder().fit_transform([''.join(str(_l)) for _l in ds.labels])
     skf = StratifiedKFold(k)
     for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):  # dividing intro train/test based on all subtypes
         with open(rf"extra/folds_division/fold{cf}.pt", 'wb') as fold_indices_file:

@@ -23,7 +23,7 @@ from collections import Counter
 
 def main():
     parser = argparse.ArgumentParser(description="configs")
-    parser.add_argument('--config', type=str, help='Path to json config file', default="train/train_physionet_config.json")
+    parser.add_argument('--config', type=str, help='Path to json config file', default="configs/train_physionet_config.json")
     args = parser.parse_args()
     with open(args.config, 'r') as f:
         config_dict = json.load(f)
@@ -100,7 +100,7 @@ def train_physionet(model: nn.Module, lr, epochs, loss_fn, train_loader, valid_l
         valid_losses.extend(_metrics['valid_cfm'].losses)
         visualize_losses(train_losses, valid_losses)
 
-        print(f"\nepoch {epoch_number}: train-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n")
+        print(f"\nepoch {epoch_number}: configs-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n")
         early_stopping(val_loss, epoch_number)
         epoch_number += 1
 
@@ -120,8 +120,8 @@ def train_and_test_physionet(physio_path, model, loss_fn):
     encoded_labels = LabelEncoder().fit_transform([''.join(str(l)) for l in ds.labels])
     skf = StratifiedKFold(k)
     test_cfm_matrices = []
-    for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):  # dividing intro train/test based on all subtypes
-        # dividing into train/valid based on any hemorrhage
+    for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):  # dividing intro configs/test based on all subtypes
+        # dividing into configs/valid based on any hemorrhage
             train_indices, valid_indices = train_test_split(train_valid_indices, stratify=ds.labels[train_valid_indices, -1], test_size=1. / (k - 1), random_state=42)
 
     train_ds = Subset(ds, train_indices)

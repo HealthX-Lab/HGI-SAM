@@ -19,7 +19,7 @@ import torch.nn as nn
 
 def main():
     parser = argparse.ArgumentParser(description="configs")
-    parser.add_argument('--config', type=str, help='Path to json config file', default="train/train_rsna_config.json")
+    parser.add_argument('--config', type=str, help='Path to json config file', default="configs/train_rsna_config.json")
     args = parser.parse_args()
     with open(args.config, 'r') as f:
         config_dict = json.load(f)
@@ -30,6 +30,7 @@ def main():
     lr = config_dict["lr"]
     do_augmentation = str_to_bool(config_dict["do_augmentation"])
     do_sampling = str_to_bool(config_dict["do_sampling"])
+    do_finetune = str_to_bool(config_dict["do_finetune"])
     validation_ratio = config_dict["validation_ratio"]
     data_path = config_dict["data_path"]
     extra_path = config_dict["extra_path"]
@@ -53,39 +54,28 @@ def main():
     train_sampler = None
     if do_sampling:
         _labels = train_ds.labels
-        _labels = _labels[:, -1]
+        _labels = _labels[:, -1]  # taking the "any" label to do sampling which corresponds to any hemorrhage
         labels_counts = Counter(_labels)
         target_list = torch.LongTensor(_labels)
         weights = torch.FloatTensor([1 / labels_counts[0], 1 / labels_counts[1]]) * (labels_counts[0] + labels_counts[1])
         class_weights = weights[target_list]
-        train_sampler = WeightedRandomSampler(class_weights, 2 * labels_counts[1], replacement=False)
+        train_sampler = WeightedRandomSampler(class_weights, 2 * labels_counts[1], replacement=False)  # the size of which we do sampling from is 2 x minority-class
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label, sampler=train_sampler)
     valid_loader = DataLoader(validation_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label)
 
-    # for i, (x, y) in enumerate(train_loader):
-    #     if y[0] == 0:
-    #         continue
-    #     z = x[0].permute(1, 2, 0)
-    #     z[:, :, 0] = (z[:, :, 0] - z[:, :, 0].min()) / (z[:, :, 0].max() - z[:, :, 0].min())
-    #     z[:, :, 1] = (z[:, :, 1] - z[:, :, 1].min()) / (z[:, :, 1].max() - z[:, :, 1].min())
-    #     z[:, :, 2] = (z[:, :, 2] - z[:, :, 2].min()) / (z[:, :, 2].max() - z[:, :, 2].min())
-    #     cv2.imshow('img', z.numpy())
-    #     cv2.waitKey()
-    #     if i > 100:
-    #         return
-
     model = SwinWeak(in_ch, num_classes)
-    load_model(model, os.path.join(extra_path, 'weights/SwinWeak_CrossEntropyLoss-mlcn.pt'))
     loss_fn = nn.CrossEntropyLoss()
     checkpoint_name = model.__class__.__name__ + "_" + loss_fn.__class__.__name__
     num_params = sum(p.numel() for p in model.parameters()) / 1e6
     print("model: ", checkpoint_name, " num-params:", num_params)
-    # for param in model.swin.parameters():
-    #     param.requires_grad = False
-    # opt = AdamW(model.head.parameters(), lr=lr, weight_decay=1e-6)
+
     opt = AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
     early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, f"weights/{checkpoint_name}"))
+
+    if do_finetune:
+        load_model(model, os.path.join(extra_path, 'weights/SwinWeak_CrossEntropyLoss-mlcn.pt'))
+
     epoch_number = 1
     train_losses = []
     valid_losses = []
@@ -97,9 +87,9 @@ def main():
         valid_losses.extend(_metrics['valid_cfm'].losses)
         visualize_losses(train_losses, valid_losses)
 
-        print(f"\nepoch {epoch_number}: train-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n"
-              f"train-acc:{_metrics['train_cfm'].get_accuracy()}, valid-acc:{_metrics['valid_cfm'].get_accuracy()}\n"
-              f"train-F1:{_metrics['train_cfm'].get_f1_score()}, valid-F1:{_metrics['valid_cfm'].get_f1_score()}")
+        print(f"\nepoch {epoch_number}: configs-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n"
+              f"configs-acc:{_metrics['train_cfm'].get_accuracy()}, valid-acc:{_metrics['valid_cfm'].get_accuracy()}\n"
+              f"configs-F1:{_metrics['train_cfm'].get_f1_score()}, valid-F1:{_metrics['valid_cfm'].get_f1_score()}")
         early_stopping(val_loss)
         epoch_number += 1
 

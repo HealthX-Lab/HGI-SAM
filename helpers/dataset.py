@@ -23,7 +23,7 @@ class RSNAICHDataset(Dataset):
         Specific pytorch dataset designed for RSNA ICH dataset
 
         :param root_dir: path to RSNA ICH root directory
-        :param filenames: list of filenames that is used in this dataset (helps in differentiating train and validation sets)
+        :param filenames: list of filenames that is used in this dataset (helps in differentiating configs and validation sets)
         :param labels: array of labels corresponding to each filename in filenames
         :param windows: a list of (a, b) tuples whereas a: window-center, b: window-width
         :param transform: transforms applied to the windowed image such is resizing
@@ -197,14 +197,14 @@ def rsna_collate_binary_label(batch):
 
 def rsna_train_valid_split(root_dir: str, extra_path: str, validation_size=0.1, random_state=42, override=False):
     """
-    a method that splits the RSNA ICH 2D dicom dataset into train and validation set randomly.
+    a method that splits the RSNA ICH 2D dicom dataset into configs and validation set randomly.
     we save the split into files for faster computation and further requirements
     :param root_dir: path to the RSNA ICH dataset root directory
     :param extra_path: path to the extra directory which contains split files
     :param validation_size: proportion of validation set
     :param random_state: the random state for splitting
     :param override: whether to compute the split again and rewrite filenames
-    :return: filenames and corresponding labels for train and validation sets.
+    :return: filenames and corresponding labels for configs and validation sets.
     """
     SUBTYPES = ["epidural", "intraparenchymal", "intraventricular", "subarachnoid", "subdural", "any"]
     train_file_split_path, validation_file_split_path = os.path.join(extra_path, 'rsna_division', 'train_file_split.pt'), os.path.join(extra_path, 'rsna_division', 'validation_file_split.pt')
@@ -239,10 +239,10 @@ def rsna_train_valid_split(root_dir: str, extra_path: str, validation_size=0.1, 
 
     labels = np.array(labels)
 
-    # train-validation split
+    # configs-validation split
     train_filenames, validation_filenames, train_labels, validation_labels = train_test_split(total_filenames, labels, test_size=validation_size, random_state=random_state)
 
-    #  saving train and validation splits filenames and labels into files
+    #  saving configs and validation splits filenames and labels into files
     with open(train_file_split_path, "wb") as tf, open(train_label_split_path, "wb") as tl, open(validation_file_split_path, "wb") as vf, open(validation_label_split_path, "wb") as vl:
         pickle.dump(train_filenames, tf), pickle.dump(train_labels, tl), pickle.dump(validation_filenames, vf), pickle.dump(validation_labels, vl)
     return train_filenames, train_labels, validation_filenames, validation_labels
@@ -325,6 +325,6 @@ def physionet_cross_validation_split(physio_path=r"C://physio-ich", k=5):
     indices = np.arange(0, len(ds.labels))
     encoded_labels = LabelEncoder().fit_transform([''.join(str(_l)) for _l in ds.labels])
     skf = StratifiedKFold(k)
-    for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):  # dividing intro train/test based on all subtypes
+    for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):  # dividing intro configs/test based on all subtypes
         with open(rf"extra/folds_division/fold{cf}.pt", 'wb') as fold_indices_file:
             pickle.dump(test_indices, fold_indices_file)

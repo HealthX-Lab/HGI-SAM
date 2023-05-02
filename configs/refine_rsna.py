@@ -19,7 +19,7 @@ import torch.nn as nn
 
 def main():
     parser = argparse.ArgumentParser(description="configs")
-    parser.add_argument('--config', type=str, help='Path to json config file', default="train/refine_rsna_config.json")
+    parser.add_argument('--config', type=str, help='Path to json config file', default="configs/refine_rsna_config.json")
     args = parser.parse_args()
     with open(args.config, 'r') as f:
         config_dict = json.load(f)

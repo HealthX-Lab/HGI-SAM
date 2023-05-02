@@ -4,17 +4,25 @@ from tqdm import tqdm
 import torch.nn.functional as F
 from copy import deepcopy
 from monai.transforms.post.array import one_hot
-import pydensecrf.densecrf as dcrf
-from pydensecrf.utils import unary_from_labels, unary_from_softmax, create_pairwise_gaussian, create_pairwise_bilateral
 
 
 def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, loss_fn, train_loader, valid_loader, device='cuda'):
+    """
+    helper method to configs a model for one epoch
+    :param model: model to configs
+    :param optimizer: optimizer to use (ADAMW)
+    :param loss_fn: loss function
+    :param train_loader: data loader for configs set
+    :param valid_loader: data loader for validation set
+    :param device: whether to configs the model on cuda or cpu
+    :return: evaluation metrics of both configs and validation sets
+    """
     model.to(device)
     model.train()
-    pbar_train = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
-    pbar_train.set_description('training')
     _metrics = {"train_cfm": ConfusionMatrix(), "valid_cfm": ConfusionMatrix()}
 
+    pbar_train = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
+    pbar_train.set_description('training')
     for i, (sample, label) in pbar_train:
         optimizer.zero_grad()
         sample, label = sample.to(device), label.to(device)
@@ -33,7 +41,6 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
     model.eval()
     pbar_valid = tqdm(enumerate(valid_loader), total=len(valid_loader), leave=False)
     pbar_valid.set_description('validating')
-
     with torch.no_grad():
         for i, (sample, label) in pbar_valid:
             sample, label = sample.to(device), label.to(device)
@@ -143,28 +150,3 @@ def train_one_epoch_refine_segmentation(model: torch.nn.Module, optimizer: torch
             _metrics["valid_cfm"].add_number_of_samples(len(label))
 
     return _metrics
-
-
-def post_process(x, p_mask):
-    img = np.array(x.permute(1, 2, 0).cpu())
-
-    d = dcrf.DenseCRF2D(384, 384, 2)
-    U = unary_from_labels(torch.argmax(p_mask, dim=0).cpu().numpy(), 2, gt_prob=0.9, zero_unsure=False)
-    d.setUnaryEnergy(U)
-
-    feats = create_pairwise_gaussian(sdims=(3, 3), shape=img.shape[:2])
-    d.addPairwiseEnergy(feats, compat=2,
-                        kernel=dcrf.DIAG_KERNEL,
-                        normalization=dcrf.NORMALIZE_SYMMETRIC)
-    feats = create_pairwise_bilateral(sdims=(16, 16), schan=(0.05, 0.1, 0.1),
-                                      img=img, chdim=2)
-    d.addPairwiseEnergy(feats, compat=3,
-                        kernel=dcrf.DIAG_KERNEL,
-                        normalization=dcrf.NORMALIZE_SYMMETRIC)
-    Q = d.inference(5)
-    crf = np.argmax(Q, axis=0)
-    crf = np.array(crf).reshape(384, 384).astype(np.float32)
-    crf = torch.FloatTensor(crf)
-    crf = one_hot(crf.unsqueeze(0), 2, dim=0).cuda()
-
-    return crf

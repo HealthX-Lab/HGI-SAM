@@ -6,7 +6,7 @@
   "epochs": -1,
   "batch_size": 8,
   "num_workers": 4,
-  "lr": 1e-6,
+  "lr": 1e-5,
   "do_augmentation": "True",
   "do_sampling": "True",
   "do_finetune": "True",

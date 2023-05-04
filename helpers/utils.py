@@ -79,9 +79,8 @@ class ConfusionMatrix:
         self.hausdorff_distances = []
 
     def add_prediction(self, pred, gt):
-        self.predictions.append(pred.item())
-        self.ground_truth.append(gt)
-        self.add_number_of_samples(1)
+        self.predictions.extend(list(pred.detach()))
+        self.ground_truth.extend(list(gt.detach()))
 
     def add_number_of_samples(self, new_samples):
         self.number_of_samples += new_samples
@@ -191,7 +190,7 @@ class EarlyStopping:
             print("val loss decreased from {} to {}".format(self.min_loss, val_loss))
             self.min_loss = val_loss
             self.counter = 0
-            save_model(self.model, f'{self.path_to_save}.pth')
+            save_model(self.model, f'{self.path_to_save}')
         else:
             self.counter += 1
             if self.counter == self.patience:
@@ -282,7 +281,7 @@ def visualize_losses(train_losses, valid_losses):
     fig, axes = plt.subplots(2)
     axes[0].plot(train_losses)
     axes[1].plot(valid_losses)
-    plt.show()
+    plt.show(block=False)
 
 
 class FocalLoss(nn.Module):

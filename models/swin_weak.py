@@ -12,7 +12,7 @@ class SwinWeak(nn.Module):
         :param num_classes: number of classes in classification task
         """
         super().__init__()
-        self.swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=in_ch, num_classes=-1)
+        self.swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=in_ch, num_classes=-1, pretrained=True)
         self.head = nn.Linear(1024, num_classes)
 
         # defining forward and backward hooks on attention weights to get the weights and their gradients
@@ -21,7 +21,7 @@ class SwinWeak(nn.Module):
         for ln, layer in enumerate(self.swin.layers):
             for bn, block in enumerate(layer.blocks):
                 block.attn.softmax.register_forward_hook(get_attentions(self.attentions, f'{ln}_{bn}'))
-                block.attn.softmax.register_backward_hook(get_attentions_grads(self.attentions_grads, f'{ln}_{bn}'))
+                block.attn.softmax.register_full_backward_hook(get_attentions_grads(self.attentions_grads, f'{ln}_{bn}'))
 
     def forward(self, x):
         """

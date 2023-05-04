@@ -35,6 +35,7 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
 
         _metrics["train_cfm"].add_loss(loss.item())
         _metrics["train_cfm"].add_prediction(torch.argmax(pred, dim=1), label)
+        _metrics["train_cfm"].add_number_of_samples(len(label))
 
     _metrics["train_cfm"].compute_confusion_matrix()
 
@@ -51,6 +52,7 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
 
             _metrics["valid_cfm"].add_loss(loss.item())
             _metrics["valid_cfm"].add_prediction(torch.argmax(pred, dim=1), label)
+            _metrics["valid_cfm"].add_number_of_samples(len(label))
 
         _metrics["valid_cfm"].compute_confusion_matrix()
 

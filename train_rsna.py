@@ -4,7 +4,7 @@ import json
 from helpers.dataset import rsna_train_valid_split, RSNAICHDataset, rsna_collate_binary_label
 from helpers.preprocessing import *
 from helpers.utils import *
-from helpers.trainer import train_one_epoch
+from helpers.trainer import train
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.optim import AdamW
 from models.swin_weak import SwinWeak
@@ -77,40 +77,18 @@ def main():
             param.requires_grad = False
         opt = AdamW(model.head.parameters(), lr=1e-3, weight_decay=1e-6)
         early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, f"weights/finetune_{checkpoint_name}.pth"))
-        print("training head")
+        print(f"training head: {checkpoint_name}")
         train(early_stopping, -1, model, opt, loss_fn, train_loader, valid_loader,
-              result_plot_path=os.path.join(extra_path, 'plots', 'train_head'))
+              result_plot_path=os.path.join(extra_path, 'plots', f'train_head_{checkpoint_name}'))
         load_model(model, os.path.join(extra_path, f"weights/finetune_{checkpoint_name}.pth"))
 
     for param in model.parameters():
         param.requires_grad = True
     opt = AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
-    early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, f"weights/{checkpoint_name}.pth"))
-    print("training model")
+    early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, "weights", f"{checkpoint_name}.pth"))
+    print(f"training model: {checkpoint_name}")
     train(early_stopping, epochs, model, opt, loss_fn, train_loader, valid_loader,
-          result_plot_path=os.path.join(extra_path, 'plots', 'train_model'))
-
-
-def train(early_stopping: EarlyStopping, epochs, model, opt, loss_fn, train_loader, valid_loader, result_plot_path):
-    epochs = np.inf if epochs == -1 else epochs
-    epoch_number = 1
-    train_losses = []
-    valid_losses = []
-    while not early_stopping.early_stop and epoch_number <= epochs:
-        _metrics = train_one_epoch(model, opt, loss_fn, train_loader, valid_loader)
-        val_loss = _metrics['valid_cfm'].get_mean_loss()
-
-        train_losses.extend(_metrics['train_cfm'].losses)
-        valid_losses.extend(_metrics['valid_cfm'].losses)
-
-        _metrics["train_cfm"].compute_confusion_matrix()
-        _metrics["valid_cfm"].compute_confusion_matrix()
-        print(f"\nepoch {epoch_number}: train-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n"
-              f"train-acc:{_metrics['train_cfm'].get_accuracy()}, valid-acc:{_metrics['valid_cfm'].get_accuracy()}\n"
-              f"train-F1:{_metrics['train_cfm'].get_f1_score()}, valid-F1:{_metrics['valid_cfm'].get_f1_score()}")
-        early_stopping(val_loss)
-        epoch_number += 1
-    visualize_losses(train_losses, valid_losses, result_plot_path)
+          result_plot_path=os.path.join(extra_path, 'plots', f'train_model_{checkpoint_name}'))
 
 
 if __name__ == '__main__':

@@ -55,6 +55,40 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
     return _metrics
 
 
+def train(early_stopping: EarlyStopping, epochs, model, opt, loss_fn, train_loader, valid_loader, result_plot_path):
+    """
+    A method to do the training until it early stops as a result of not seeing a reduction in validation loss
+    :param early_stopping: an object that controls early stopping
+    :param epochs: for how many epochs to model should be trained; -1 means it should be trained until it early stops
+    :param model: the model to train (Swin-Weak or UNet)
+    :param opt: optimizer object
+    :param loss_fn: loss function object
+    :param train_loader: data loader for train set
+    :param valid_loader: data loader for test set
+    :param result_plot_path: the path to save the train/validation loss plots
+    :return:
+    """
+    epochs = np.inf if epochs == -1 else epochs
+    epoch_number = 1
+    train_losses = []
+    valid_losses = []
+    while not early_stopping.early_stop and epoch_number <= epochs:
+        _metrics = train_one_epoch(model, opt, loss_fn, train_loader, valid_loader)
+        val_loss = _metrics['valid_cfm'].get_mean_loss()
+
+        train_losses.extend(_metrics['train_cfm'].losses)
+        valid_losses.extend(_metrics['valid_cfm'].losses)
+
+        _metrics["train_cfm"].compute_confusion_matrix()
+        _metrics["valid_cfm"].compute_confusion_matrix()
+        print(f"\nepoch {epoch_number}: train-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n"
+              f"train-acc:{_metrics['train_cfm'].get_accuracy()}, valid-acc:{_metrics['valid_cfm'].get_accuracy()}\n"
+              f"train-F1:{_metrics['train_cfm'].get_f1_score()}, valid-F1:{_metrics['valid_cfm'].get_f1_score()}")
+        early_stopping(val_loss)
+        epoch_number += 1
+    visualize_losses(train_losses, valid_losses, result_plot_path)
+
+
 def train_one_epoch_segmentation(model: torch.nn.Module, optimizer: torch.optim.Optimizer, loss_fn, train_loader, valid_loader, device='cuda', augmentation=None):
     model.to(device)
     model.train()

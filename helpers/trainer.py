@@ -2,13 +2,10 @@ import torch.optim
 from helpers.utils import *
 from tqdm import tqdm
 import torch.nn.functional as F
-from models.unet import UNet
 from models.swin_weak import SwinWeak
-from copy import deepcopy
-from monai.transforms.post.array import one_hot
 
 
-def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, loss_fn, train_loader, valid_loader, device='cuda'):
+def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, loss_fn, train_loader, valid_loader, device='cuda', train_mode="classification", augmentation=None):
     """
     helper method to configs a model for one epoch
 
@@ -18,6 +15,8 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
     :param train_loader: data loader for configs set
     :param valid_loader: data loader for validation set
     :param device: whether to configs the model on cuda or cpu
+    :param train_mode: classification or segmentation
+    :param augmentation: only used when trained in segmentation mode. Because in PhysioNet dataset we read the whole dataset first, we have to do the augmentation while training.
     :return: evaluation metrics of both configs and validation sets
     """
     model.to(device)
@@ -30,15 +29,21 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
         optimizer.zero_grad()
         sample, label = sample.to(device), label.to(device)
 
+        if augmentation is not None:
+            for b in range(len(label)):
+                sample[b], label[b] = augmentation(sample[b], label[b])
+
         pred = model(sample)
         pred = F.softmax(pred, dim=1)
         loss = loss_fn(pred, label)
+
         loss.backward()
         optimizer.step()
 
         _metrics["train_cfm"].add_loss(loss.item())
-        _metrics["train_cfm"].add_prediction(torch.argmax(pred, dim=1), label)
         _metrics["train_cfm"].add_number_of_samples(len(label))
+        if train_mode == "classificatin":
+            _metrics["train_cfm"].add_prediction(torch.argmax(pred, dim=1), label)
 
     model.eval()
     pbar_valid = tqdm(enumerate(valid_loader), total=len(valid_loader), leave=False)
@@ -52,8 +57,9 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
             loss = loss_fn(pred, label)
 
             _metrics["valid_cfm"].add_loss(loss.item())
-            _metrics["valid_cfm"].add_prediction(torch.argmax(pred, dim=1), label)
             _metrics["valid_cfm"].add_number_of_samples(len(label))
+            if train_mode == "classification":
+                _metrics["valid_cfm"].add_prediction(torch.argmax(pred, dim=1), label)
 
     return _metrics
 
@@ -73,23 +79,20 @@ def train(early_stopping: EarlyStopping, epochs, model, opt, loss_fn, train_load
     :param augmentation: only used when trained in segmentation mode. Because in PhysioNet dataset we read the whole dataset first, we have to do the augmentation while training.
     """
     epochs = np.inf if epochs == -1 else epochs
-    _type = "classification" if isinstance(model, SwinWeak) else "segmentation"
+    train_mode = "classification" if isinstance(model, SwinWeak) else "segmentation"
     epoch_number = 1
     train_losses = []
     valid_losses = []
     while not early_stopping.early_stop and epoch_number <= epochs:
-        if _type == "classification":
-            _metrics = train_one_epoch(model, opt, loss_fn, train_loader, valid_loader)
-            val_loss = _metrics['valid_cfm'].get_mean_loss()
+        _metrics = train_one_epoch(model, opt, loss_fn, train_loader, valid_loader, train_mode=train_mode, augmentation=augmentation)
+        val_loss = _metrics['valid_cfm'].get_mean_loss()
+        if train_mode == "classification":
             _metrics["train_cfm"].compute_confusion_matrix()
             _metrics["valid_cfm"].compute_confusion_matrix()
             print(f"\nepoch {epoch_number}: train-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n"
                   f"train-acc:{_metrics['train_cfm'].get_accuracy()}, valid-acc:{_metrics['valid_cfm'].get_accuracy()}\n"
                   f"train-F1:{_metrics['train_cfm'].get_f1_score()}, valid-F1:{_metrics['valid_cfm'].get_f1_score()}")
-
         else:
-            _metrics = train_one_epoch_segmentation(model, opt, loss_fn, train_loader, valid_loader, augmentation=augmentation)
-            val_loss = _metrics['valid_cfm'].get_mean_loss()
             print(f"\nepoch {epoch_number}: train-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n")
 
         train_losses.extend(_metrics['train_cfm'].losses)
@@ -98,43 +101,3 @@ def train(early_stopping: EarlyStopping, epochs, model, opt, loss_fn, train_load
         early_stopping(val_loss)
         epoch_number += 1
     visualize_losses(train_losses, valid_losses, result_plot_path)
-
-
-def train_one_epoch_segmentation(model: torch.nn.Module, optimizer: torch.optim.Optimizer, loss_fn, train_loader, valid_loader, device='cuda', augmentation=None):
-    model.to(device)
-    model.train()
-    pbar_train = tqdm(enumerate(train_loader), total=len(train_loader), leave=False)
-    pbar_train.set_description('training')
-    _metrics = {"train_cfm": ConfusionMatrix(), "valid_cfm": ConfusionMatrix()}
-
-    for i, (sample, label) in pbar_train:
-        optimizer.zero_grad()
-        sample, label = sample.to(device), label.to(device)
-        if augmentation is not None:
-            for b in range(len(label)):
-                sample[b], label[b] = augmentation(sample[b], label[b])
-
-        pred = model(sample)
-        loss = loss_fn(pred, label)
-
-        loss.backward()
-        optimizer.step()
-
-        _metrics["train_cfm"].add_loss(loss.item())
-        _metrics["train_cfm"].add_number_of_samples(len(label))
-
-    model.eval()
-    pbar_valid = tqdm(enumerate(valid_loader), total=len(valid_loader), leave=False)
-    pbar_valid.set_description('validating')
-
-    with torch.no_grad():
-        for i, (sample, label) in pbar_valid:
-            sample, label = sample.to(device), label.to(device)
-
-            pred = model(sample)
-            loss = loss_fn(pred, label)
-
-            _metrics["valid_cfm"].add_loss(loss.item())
-            _metrics["valid_cfm"].add_number_of_samples(len(label))
-
-    return _metrics

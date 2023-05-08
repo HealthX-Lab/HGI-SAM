@@ -168,7 +168,6 @@ class DiceCELoss(nn.Module):
         self.alpha = alpha
 
     def forward(self, pred_mask, target_mask):
-        pred_mask = F.softmax(pred_mask, dim=1)
         target_mask = one_hot(target_mask, 2, dim=1)
         return self.alpha * self.ce_loss(pred_mask, target_mask) + (1 - self.alpha) * self.dice_loss(pred_mask, target_mask)
 

@@ -1,9 +1,9 @@
+import os
 import argparse
 import json
 import numpy as np
 import statistics
 import torch
-import torch.nn as nn
 import pickle
 from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 from torch.optim import AdamW
@@ -15,8 +15,8 @@ from helpers.preprocessing import Augmentation, get_transform
 from helpers.utils import EarlyStopping, ConfusionMatrix, dice_metric, hausdorff_distance, intersection_over_union, binarization_otsu, binarization_simple_thresholding, load_model
 from helpers.dataset import PhysioNetICHDataset, physio_collate_image_mask, physionet_cross_validation_split
 from models.unet import UNet
-from helpers.trainer import train_one_epoch_segmentation
-from helpers.utils import str_to_bool, visualize_losses, DiceCELoss
+from helpers.trainer import train
+from helpers.utils import str_to_bool, DiceCELoss
 
 
 def main():
@@ -48,127 +48,60 @@ def main():
     if do_augmentation:
         augmentation = Augmentation(with_mask=True)
 
-    physionet_cross_validation_split(data_path, extra_path, k=5, override=False)
-
+    folds = 5
+    physionet_cross_validation_split(data_path, extra_path, k=folds, override=False)
+    # creating the physionet dataset.
+    # brain and bone window parameters are derived from the dataset paper. Subdural window params is adapted based on RSNA one, and these two ds differences.
     ds = PhysioNetICHDataset(data_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
     all_indices = np.arange(0, len(ds.labels))
-    for cf in range(4, k):
+    for cf in range(4, folds):
+        # get the indices for train, validation and test sets.
         with open(os.path.join(extra_path, "folds_division", f"fold{cf}.pt"), "rb") as test_indices_file:
             test_indices = pickle.load(test_indices_file)
         train_valid_indices = [x for x in all_indices if x not in test_indices]
+        # train/validation division is only based on whether hemorrhages exist, not the subtypes
         train_indices, valid_indices = train_test_split(train_valid_indices, stratify=ds.labels[train_valid_indices, -1], test_size=validation_ratio, random_state=42)
 
         model = UNet(in_ch=in_ch, num_classes=num_classes, embed_dims=embed_dims)
+        # we use a combo loss to overcome to problem of imbalanced foreground/background pixels.
         loss_fn = DiceCELoss()
         checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__
-        checkpoint_path = os.path.join(extra_path, "weights", checkpoint_name)
 
         if do_sampling:
             _labels = ds.labels
+            # getting only the label that represents "ANY" hemorrhage
             _labels = _labels[:, -1]
             labels_counts = Counter(_labels[train_indices])
             target_list = torch.LongTensor(_labels)
+            # weight the sampler inversely proportional to the labels frequency
             weights = torch.FloatTensor([1 / labels_counts[0], 1 / labels_counts[1]]) * (labels_counts[0] + labels_counts[1])
             class_weights = weights[target_list]
+            # zero-out the weight of test-set and validation-set in order for the sample to only get data from train-set
             class_weights[test_indices] = 0
             class_weights[valid_indices] = 0
+            # because the dataset is small, we make sampling with-replacement and the size equal to the dataset size,
+            # so at each epoch, positive samples are seen multiple times, and as a result, some negative samples remain unseen.
+            # However, after several epochs, all samples is likely to be seen. This technique has shown to be the most effective one.
+            # on the other hand, for RSNA sampler, we make it "without" replacement, and the data size double than the minority class,
+            # as it makes it faster with a little performance loss.
             train_sampler = WeightedRandomSampler(class_weights, len(train_indices), replacement=True)
             train_loader = DataLoader(ds, batch_size=batch_size, collate_fn=physio_collate_image_mask, num_workers=num_workers, sampler=train_sampler)
         else:
+            # if sampling is not requested, we do normal batching.
             train_ds = Subset(ds, train_indices)
             train_loader = DataLoader(train_ds, batch_size=batch_size, collate_fn=physio_collate_image_mask, num_workers=num_workers, shuffle=True)
         valid_ds = Subset(ds, valid_indices)
         valid_loader = DataLoader(valid_ds, batch_size=batch_size, collate_fn=physio_collate_image_mask)
 
-        train_physionet(model, lr, epochs, loss_fn, train_loader, valid_loader, checkpoint_path, cf, augmentation=augmentation)
+        opt = AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
+        early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, "weights", f"{checkpoint_name}-fold{cf}.pth"))
+        print(f"training model: {checkpoint_name}")
+
+        train(early_stopping, epochs, model, opt, loss_fn, train_loader, valid_loader, augmentation=augmentation,
+              result_plot_path=os.path.join(extra_path, 'plots', f'train_model_{checkpoint_name}-fold{cf}'))
         del model
         torch.cuda.empty_cache()
 
 
-def train_physionet(model: nn.Module, lr, epochs, loss_fn, train_loader, valid_loader, checkpoint_path, cf, device='cuda', augmentation=None):
-    opt = AdamW(model.parameters(), lr=lr)
-    early_stopping = EarlyStopping(model, 3, f'{checkpoint_path}-fold{cf}')
-
-    epoch_number = 1
-    train_losses = []
-    valid_losses = []
-    while not early_stopping.early_stop and epochs <= epoch_number:
-        _metrics = train_one_epoch_segmentation(model, opt, loss_fn, train_loader, valid_loader, augmentation=augmentation)
-        val_loss = _metrics['valid_cfm'].get_mean_loss()
-
-        train_losses.extend(_metrics['train_cfm'].losses)
-        valid_losses.extend(_metrics['valid_cfm'].losses)
-        visualize_losses(train_losses, valid_losses)
-
-        print(f"\nepoch {epoch_number}: configs-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n")
-        early_stopping(val_loss, epoch_number)
-        epoch_number += 1
-
-
 if __name__ == '__main__':
     main()
-
-
-def train_and_test_physionet(physio_path, model, loss_fn):
-    k = 5
-    device = 'cuda'
-    checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__
-
-    ds = PhysioNetICHDataset(physio_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
-
-    indices = np.arange(0, len(ds.labels))
-    encoded_labels = LabelEncoder().fit_transform([''.join(str(l)) for l in ds.labels])
-    skf = StratifiedKFold(k)
-    test_cfm_matrices = []
-    for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):  # dividing intro configs/test based on all subtypes
-        # dividing into configs/valid based on any hemorrhage
-            train_indices, valid_indices = train_test_split(train_valid_indices, stratify=ds.labels[train_valid_indices, -1], test_size=1. / (k - 1), random_state=42)
-
-    train_ds = Subset(ds, train_indices)
-    valid_ds = Subset(ds, valid_indices)
-    test_ds = Subset(ds, test_indices)
-
-    train_loader = DataLoader(train_ds, batch_size=1, shuffle=True, collate_fn=physio_collate_image_mask)
-    valid_loader = DataLoader(valid_ds, batch_size=1, collate_fn=physio_collate_image_mask)
-    test_loader = DataLoader(test_ds, batch_size=1, collate_fn=physio_collate_image_mask)
-
-    train_physionet(model, loss_fn, train_loader, valid_loader, checkpoint_name, cf, device)
-    load_model(model, f'{checkpoint_name}-fold{cf}.pth')
-    test_cfm = test_physionet(model, test_loader, False, 0.5, device)
-
-    test_cfm_matrices.append(test_cfm)
-    print(f'fold {cf + 1} dice:', test_cfm.get_mean_dice(), ' iou:', test_cfm.get_mean_iou(), ' hausdorff:', test_cfm.get_mean_hausdorff_distance())
-
-    dices = []
-    IoUs = []
-    hausdorff_distances = []
-    for i in range(k):
-        dices.append(test_cfm_matrices[i].get_mean_dice().item())
-        IoUs.append(test_cfm_matrices[i].get_mean_iou().item())
-        hausdorff_distances.append(test_cfm_matrices[i].get_mean_hausdorff_distance().item())
-
-    print('dice: ', statistics.mean(dices), ' +/- ', statistics.stdev(dices))
-    print('IoU: ', statistics.mean(IoUs), ' +/- ', statistics.stdev(IoUs))
-    print('hausdorff: ', statistics.mean(hausdorff_distances), ' +/- ', statistics.stdev(hausdorff_distances))
-
-
-def test_physionet(model, test_loader, weak_model=False, threshold=0.5, device="cuda"):
-    model.to(device)
-    test_cfm = ConfusionMatrix()
-    with torch.no_grad():
-        for image, label in test_loader:
-            image, label = image.to(device), label.to(device)
-            if not label.any():
-                continue
-            if weak_model:
-                pred, pred_mask = model.attentional_segmentation(image)
-            else:
-                pred_mask = model(image)
-                pred_mask = torch.sigmoid(pred_mask).squeeze(1)
-
-            pred_mask = binarization_simple_thresholding(pred_mask, threshold)
-            test_cfm.add_dice(dice_metric(pred_mask, label))
-            test_cfm.add_iou(intersection_over_union(pred_mask, label))
-            test_cfm.add_hausdorff_distance(hausdorff_distance(pred_mask, label))
-
-    return test_cfm

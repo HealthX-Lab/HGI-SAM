@@ -48,8 +48,8 @@ def main():
     if do_augmentation:
         augmentation = Augmentation(with_mask=False)
 
-    train_ds = RSNAICHDataset(data_path, t_x[:100], t_y[:100], windows=windows, transform=transform, augmentation=augmentation)
-    validation_ds = RSNAICHDataset(data_path, v_x[:10], v_y[:10], windows=windows, transform=transform)
+    train_ds = RSNAICHDataset(data_path, t_x, t_y, windows=windows, transform=transform, augmentation=augmentation)
+    validation_ds = RSNAICHDataset(data_path, v_x, v_y, windows=windows, transform=transform)
 
     train_sampler = None
     if do_sampling:

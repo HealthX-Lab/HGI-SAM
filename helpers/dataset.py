@@ -317,6 +317,7 @@ def _read_image_2d(file_path: str):
 def physionet_cross_validation_split(physio_path, extra_path, k=5, override=False):
     """
     a method to create cross-validation folds for PhysioNet ICH dataset based on Stratified K fold division
+    test indices for k folds will be saved in files
     :param physio_path: path to the PhysioNet ICH dataset root directory
     :param k: number of folds
     :param override: whether to override the k-fold cross validation if files already exist

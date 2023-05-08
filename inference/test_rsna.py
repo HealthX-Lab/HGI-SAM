@@ -1,5 +1,3 @@
-import os
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 import torch
 from helpers.dataset import *
 from helpers.preprocessing import get_transform

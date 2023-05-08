@@ -277,11 +277,11 @@ def str_to_bool(string):
     return True if string == "True" else False
 
 
-def visualize_losses(train_losses, valid_losses):
+def visualize_losses(train_losses, valid_losses, path_to_save):
     fig, axes = plt.subplots(2)
     axes[0].plot(train_losses)
     axes[1].plot(valid_losses)
-    plt.show(block=False)
+    plt.savefig(path_to_save)
 
 
 class FocalLoss(nn.Module):

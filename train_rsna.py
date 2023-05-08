@@ -78,7 +78,8 @@ def main():
         opt = AdamW(model.head.parameters(), lr=1e-3, weight_decay=1e-6)
         early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, f"weights/finetune_{checkpoint_name}.pth"))
         print("training head")
-        train(early_stopping, -1, model, opt, loss_fn, train_loader, valid_loader)
+        train(early_stopping, -1, model, opt, loss_fn, train_loader, valid_loader,
+              result_plot_path=os.path.join(extra_path, 'plots', 'train_head'))
         load_model(model, os.path.join(extra_path, f"weights/finetune_{checkpoint_name}.pth"))
 
     for param in model.parameters():
@@ -86,11 +87,11 @@ def main():
     opt = AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
     early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, f"weights/{checkpoint_name}.pth"))
     print("training model")
-    train(early_stopping, epochs, model, opt, loss_fn, train_loader, valid_loader)
-    plt.show()
+    train(early_stopping, epochs, model, opt, loss_fn, train_loader, valid_loader,
+          result_plot_path=os.path.join(extra_path, 'plots', 'train_model'))
 
 
-def train(early_stopping: EarlyStopping, epochs, model, opt, loss_fn, train_loader, valid_loader):
+def train(early_stopping: EarlyStopping, epochs, model, opt, loss_fn, train_loader, valid_loader, result_plot_path):
     epochs = np.inf if epochs == -1 else epochs
     epoch_number = 1
     train_losses = []
@@ -107,7 +108,7 @@ def train(early_stopping: EarlyStopping, epochs, model, opt, loss_fn, train_load
               f"train-F1:{_metrics['train_cfm'].get_f1_score()}, valid-F1:{_metrics['valid_cfm'].get_f1_score()}")
         early_stopping(val_loss)
         epoch_number += 1
-    visualize_losses(train_losses, valid_losses)
+    visualize_losses(train_losses, valid_losses, result_plot_path)
 
 
 if __name__ == '__main__':

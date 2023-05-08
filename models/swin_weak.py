@@ -8,6 +8,7 @@ class SwinWeak(nn.Module):
     def __init__(self, in_ch, num_classes):
         """
         A Swin transformer class that extracts attention weights and their respective gradients to do weakly supervised segmentation
+
         :param in_ch: number of input image channels
         :param num_classes: number of classes in classification task
         """
@@ -26,6 +27,7 @@ class SwinWeak(nn.Module):
     def forward(self, x):
         """
         classification forward
+
         :param x: input image
         :return: classification result
         """
@@ -35,6 +37,7 @@ class SwinWeak(nn.Module):
     def attentional_segmentation(self, brainmask):
         """
         Swin-SAM: weak segmentation mask generation that only uses forward pass (MLCN paper)
+
         :param brainmask: brain-mask used to mask out predictions overlapping background and skull
         :return: segmentation map
         """
@@ -49,6 +52,7 @@ class SwinWeak(nn.Module):
     def attentional_segmentation_grad(self, brainmask):
         """
         HGI-SAM: weak segmentation mask generation that uses both attention weights and their respective gradients
+
         :param brainmask: brain-mask used to mask out predictions overlapping background and skull
         :return: segmentation map
         """
@@ -64,6 +68,7 @@ class SwinWeak(nn.Module):
     def grad_cam_segmentation(self, x, brain):
         """
         Swin-GradCAM: weak segmentation mask generation that uses GradCAM technique
+
         :param x: input image
         :param brain: brain-mask used to mask out predictions overlapping background and skull
         :return: segmentation map
@@ -79,13 +84,13 @@ class SwinWeak(nn.Module):
 
 def window_reverse(windows, window_size: int, H: int, W: int):
     """
-    Args:
-        windows: (num_windows*B, window_size, window_size, C)
-        window_size (int): Window size
-        H (int): Height of image
-        W (int): Width of image
-    Returns:
-        x: (B, H, W, C)
+    A window reverse method that constructs original image by concatenating windows.
+
+    :param windows: input tensor in the format of (num_windows*B, window_size, window_size, C)
+    :param window_size: Window size
+    :param H: Height of image
+    :param W: Width of image
+    :return: window reversed tensor in the format of (B, H, W, C)
     """
     B = int(windows.shape[0] / (H * W / window_size / window_size))
     x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
@@ -96,6 +101,7 @@ def window_reverse(windows, window_size: int, H: int, W: int):
 def get_attentions(att_dict, layer_block):
     """
     helper function used to get each block's attention weights
+
     :param att_dict: the dictionary in which we save the weight
     :param layer_block: the key for saving the weight in dictionary
     """
@@ -108,6 +114,7 @@ def get_attentions(att_dict, layer_block):
 def get_attentions_grads(att_dict, layer_block):
     """
     helper function used to get the gradient of each block's attention weight
+
     :param att_dict: the dictionary in which we save the gradient
     :param layer_block: the key for saving the gradient in dictionary
     """
@@ -121,6 +128,7 @@ def _get_layer_attention_mask(attentions: dict, img_size: int, patch_size: int, 
                               attentions_grad=None):
     """
     a method that produces the attention map using attention weights and their respective gradients
+
     :param attentions: attention weights
     :param img_size: size of input image
     :param patch_size: size of patch (4 in our Swin-Transformer Base)

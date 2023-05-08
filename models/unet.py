@@ -6,6 +6,7 @@ class UNet(nn.Module):
     def __init__(self, in_ch, num_classes, embed_dims):
         """
         A 2D UNet class
+
         :param in_ch: number of channels in input image
         :param num_classes: number of classes
         :param embed_dims: list of embedding dimensions
@@ -57,6 +58,7 @@ class ConvBlock(nn.Module):
     def __init__(self, in_ch, out_ch, kernel_size):
         """
         A helper class for UNet model which is composed of 2 consecutive convolutional layers with GELU activation and Instance normalization
+
         :param in_ch: number of input channels
         :param out_ch: number of output channels
         :param kernel_size: kernel size of convolutional layers

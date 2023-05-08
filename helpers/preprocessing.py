@@ -7,6 +7,7 @@ from numpy import deg2rad
 def window_image(image, window_params, intercept, slope, rescale=True):
     """
     A method to window CT image
+
     :param image: image intensities of Hounsfield units
     :param window_params: (window-center, window-width)
     :param intercept: the intercept of window
@@ -32,6 +33,7 @@ def get_transform(image_size):
     """
     preprocessing transforms applied to image, which only includes resizing the image
     to delete some parts of background, we resize it to 110% of needed size, and then we center crop the image
+
     :param image_size: the size of image needed
     :return: transformed image
     """
@@ -47,6 +49,7 @@ class Augmentation:
     def __init__(self, with_mask=False):
         """
         an Augmentation class which includes random flipping, random affine transformation, and random Gaussian noise addition.
+
         :param with_mask: whether to apply the transforms on images masks as well.
         """
         keys = ['image', 'mask'] if with_mask else ['image']

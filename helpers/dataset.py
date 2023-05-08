@@ -162,6 +162,7 @@ class PhysioNetICHDataset(Dataset):
 def physio_collate_image_mask(batch):
     """
     collate function for PhysioNet dataset that only returns image and its ground-truth mask
+
     :param batch: the read batch
     :return: a tuple of image intensities and ground-truth mask
     """
@@ -174,6 +175,7 @@ def physio_collate_image_mask(batch):
 def physio_collate_image_label(batch):
     """
     collate function for PhysioNet dataset that only returns image and its label
+
     :param batch: the read batch
     :return: a tuple of image intensities and hemorrhage-existence label
     """
@@ -186,6 +188,7 @@ def physio_collate_image_label(batch):
 def rsna_collate_binary_label(batch):
     """
     collate function for RSNA dataset that returns only any-hemorrhage label
+
     :param batch: the read batch
     :return: a tuple of image intensities and hemorrhage-existence (any) label
     """
@@ -199,6 +202,7 @@ def rsna_train_valid_split(root_dir: str, extra_path: str, validation_size=0.1, 
     """
     a method that splits the RSNA ICH 2D dicom dataset into configs and validation set randomly.
     we save the split into files for faster computation and further requirements
+
     :param root_dir: path to the RSNA ICH dataset root directory
     :param extra_path: path to the extra directory which contains split files
     :param validation_size: proportion of validation set
@@ -251,6 +255,7 @@ def rsna_train_valid_split(root_dir: str, extra_path: str, validation_size=0.1, 
 def _get_image_windows(image, windows: [(int, int)], intercept, slope):
     """
     a method that returns a stack of windowed images
+
     :param image: original intensities of CT scan
     :param windows: list of windowing parameters
     :param intercept: intercept of window
@@ -268,6 +273,7 @@ def _read_image_3d(file_path: str, do_rotate=False):
     """
     A method to read 3D nifty image
     rotation is applied because the way nifty and dicom arrays are stores is different, and we need a rotation to make them similar
+
     :param file_path: path to the nifty file
     :param do_rotate: whether to rotate image 90 degrees counter-clock-wise
     :return: 3D tensor of image intensities
@@ -302,6 +308,7 @@ def _get_windowing(data):
 def _read_image_2d(file_path: str):
     """
     a method to read 2D dicom image
+
     :param file_path: path to the file
     :return: 2D tensor of image intensities and brain-window parameters derived from dicom headers
     """
@@ -318,6 +325,7 @@ def physionet_cross_validation_split(physio_path, extra_path, k=5, override=Fals
     """
     a method to create cross-validation folds for PhysioNet ICH dataset based on Stratified K fold division
     test indices for k folds will be saved in files
+
     :param physio_path: path to the PhysioNet ICH dataset root directory
     :param k: number of folds
     :param override: whether to override the k-fold cross validation if files already exist

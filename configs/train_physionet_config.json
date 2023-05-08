@@ -1,5 +1,4 @@
 {
-  "img_size": 384,
   "in_ch": 3,
   "num_classes": 2,
 

@@ -1,27 +1,29 @@
-import os
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 import argparse
 import json
-from helpers.preprocessing import Augmentation
-from helpers.utils import EarlyStopping, ConfusionMatrix, dice_metric, hausdorff_distance, intersection_over_union, binarization_otsu, binarization_simple_thresholding, load_model
-from helpers.dataset import PhysioNetICHDataset, physio_collate_image_mask, physionet_cross_validation_split
-from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
-from torch.optim import AdamW
-from models.unet import UNet
-from helpers.trainer import train_one_epoch_segmentation
-from helpers.preprocessing import get_transform
-from sklearn.model_selection import StratifiedKFold, train_test_split
-from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import statistics
 import torch
 import torch.nn as nn
 import pickle
-from helpers.utils import str_to_bool, visualize_losses, DiceCELoss
+from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
+from torch.optim import AdamW
+from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.preprocessing import LabelEncoder
 from collections import Counter
+
+from helpers.preprocessing import Augmentation, get_transform
+from helpers.utils import EarlyStopping, ConfusionMatrix, dice_metric, hausdorff_distance, intersection_over_union, binarization_otsu, binarization_simple_thresholding, load_model
+from helpers.dataset import PhysioNetICHDataset, physio_collate_image_mask, physionet_cross_validation_split
+from models.unet import UNet
+from helpers.trainer import train_one_epoch_segmentation
+from helpers.utils import str_to_bool, visualize_losses, DiceCELoss
 
 
 def main():
+    """
+    Run this method to train the UNet model for Fully Supervised Hemorrhage segmentation.
+    Training parameters is defined in the config file: train_physionet_config.json.
+    """
     parser = argparse.ArgumentParser(description="configs")
     parser.add_argument('--config', type=str, help='Path to json config file', default="configs/train_physionet_config.json")
     args = parser.parse_args()
@@ -38,7 +40,6 @@ def main():
     data_path = config_dict["data_path"]
     extra_path = config_dict["extra_path"]
 
-    img_size = config_dict["img_size"]
     in_ch = config_dict["in_ch"]
     num_classes = config_dict["num_classes"]
     embed_dims = list(config_dict["embed_dims"])
@@ -47,8 +48,7 @@ def main():
     if do_augmentation:
         augmentation = Augmentation(with_mask=True)
 
-    k = 5
-    # physionet_cross_validation_split()
+    physionet_cross_validation_split(data_path, extra_path, k=5, override=False)
 
     ds = PhysioNetICHDataset(data_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
     all_indices = np.arange(0, len(ds.labels))

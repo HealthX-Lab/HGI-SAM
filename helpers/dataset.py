@@ -314,17 +314,28 @@ def _read_image_2d(file_path: str):
     return image, window_params
 
 
-def physionet_cross_validation_split(physio_path=r"C://physio-ich", k=5):
+def physionet_cross_validation_split(physio_path, extra_path, k=5, override=False):
     """
     a method to create cross-validation folds for PhysioNet ICH dataset based on Stratified K fold division
     :param physio_path: path to the PhysioNet ICH dataset root directory
     :param k: number of folds
+    :param override: whether to override the k-fold cross validation if files already exist
+    :param extra_path: where to save the folds
     """
+    # if overriden is not asked and all folds' divisions exist in the extra path, we do not redo the division.
+    if not override:
+        files_exist = True
+        for i in range(k):
+            if not os.path.isfile(os.path.join(extra_path, 'folds_division', f"fold{i}.pt")):
+                files_exist = False
+        if files_exist:
+            return
     ds = PhysioNetICHDataset(physio_path)
 
     indices = np.arange(0, len(ds.labels))
+    # dividing into train/test based on all subtypes
     encoded_labels = LabelEncoder().fit_transform([''.join(str(_l)) for _l in ds.labels])
     skf = StratifiedKFold(k)
-    for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):  # dividing intro configs/test based on all subtypes
-        with open(rf"extra/folds_division/fold{cf}.pt", 'wb') as fold_indices_file:
+    for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):
+        with open(os.path.join(extra_path, 'folds_division', f"fold{cf}.pt"), 'wb') as fold_indices_file:
             pickle.dump(test_indices, fold_indices_file)

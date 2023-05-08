@@ -42,7 +42,7 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
 
         _metrics["train_cfm"].add_loss(loss.item())
         _metrics["train_cfm"].add_number_of_samples(len(label))
-        if train_mode == "classificatin":
+        if train_mode == "classification":
             _metrics["train_cfm"].add_prediction(torch.argmax(pred, dim=1), label)
 
     model.eval()

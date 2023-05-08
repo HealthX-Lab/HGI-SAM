@@ -37,8 +37,6 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
         _metrics["train_cfm"].add_prediction(torch.argmax(pred, dim=1), label)
         _metrics["train_cfm"].add_number_of_samples(len(label))
 
-    _metrics["train_cfm"].compute_confusion_matrix()
-
     model.eval()
     pbar_valid = tqdm(enumerate(valid_loader), total=len(valid_loader), leave=False)
     pbar_valid.set_description('validating')
@@ -53,8 +51,6 @@ def train_one_epoch(model: torch.nn.Module, optimizer: torch.optim.Optimizer, lo
             _metrics["valid_cfm"].add_loss(loss.item())
             _metrics["valid_cfm"].add_prediction(torch.argmax(pred, dim=1), label)
             _metrics["valid_cfm"].add_number_of_samples(len(label))
-
-        _metrics["valid_cfm"].compute_confusion_matrix()
 
     return _metrics
 

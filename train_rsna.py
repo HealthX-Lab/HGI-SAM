@@ -103,6 +103,8 @@ def train(early_stopping: EarlyStopping, epochs, model, opt, loss_fn, train_load
         train_losses.extend(_metrics['train_cfm'].losses)
         valid_losses.extend(_metrics['valid_cfm'].losses)
 
+        _metrics["train_cfm"].compute_confusion_matrix()
+        _metrics["valid_cfm"].compute_confusion_matrix()
         print(f"\nepoch {epoch_number}: train-loss:{_metrics['train_cfm'].get_mean_loss()}, valid_loss:{val_loss}\n"
               f"train-acc:{_metrics['train_cfm'].get_accuracy()}, valid-acc:{_metrics['valid_cfm'].get_accuracy()}\n"
               f"train-F1:{_metrics['train_cfm'].get_f1_score()}, valid-F1:{_metrics['valid_cfm'].get_f1_score()}")

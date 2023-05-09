@@ -1,0 +1,17 @@
+{
+  "in_ch": 3,
+  "num_classes": 2,
+
+  "epochs": -1,
+  "batch_size": 16,
+  "num_workers": 4,
+  "lr": 0.001,
+  "do_augmentation": "True",
+  "do_sampling": "True",
+  "validation_ratio": 0.1,
+
+  "embed_dims": [24, 48, 96, 192],
+
+  "data_path": "C:\\physio-ich",
+  "extra_path": "extra\\"
+}

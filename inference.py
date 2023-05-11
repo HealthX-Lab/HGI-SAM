@@ -35,6 +35,13 @@ def main():
                       "Swin-GradCAM": config_dict["Swin-GradCAM_path"],
                       "Swin-HGI-SAM": config_dict["Swin-HGI-SAM_path"],
                       "UNet": config_dict["UNet_dir_path"]}
+
+    csv_seg_results_path = config_dict["csv_seg_results_path"]
+    save_visualizations = str_to_bool(config_dict["save_visualizations"])
+    save_visualizations_dir = config_dict["save_visualizations_dir"]
+    if save_visualizations:
+        assert os.path.isdir(save_visualizations_dir)
+
     if torch.cuda.is_available():
         device = 'cuda'
     else:
@@ -42,8 +49,8 @@ def main():
 
     ds = PhysioNetICHDataset(data_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
     # dictionary holding segmentation results
-    seg_results = {"dice": {"SwinSAM-binary": [], "SwinSAM-multi": [], "Swin-GradCAM": [], "Swin-HGI-SAM": [], "UNet": []},
-                   "iou":  {"SwinSAM-binary": [], "SwinSAM-multi": [], "Swin-GradCAM": [], "Swin-HGI-SAM": [], "UNet": []}}
+    seg_results = {"dice_SwinSAM-binary": [], "dice_SwinSAM-multi": [], "dice_Swin-GradCAM": [], "dice_Swin-HGI-SAM": [], "dice_UNet": [],
+                   "iou_SwinSAM-binary": [], "iou_SwinSAM-multi": [], "iou_Swin-GradCAM": [], "iou_Swin-HGI-SAM": [], "iou_UNet": []}
 
     # iterating over folds
     for fold_number in [0, 1, 2, 3, 4]:
@@ -86,17 +93,17 @@ def main():
 
         # thresholds for prediction mask binarization. Uncomment bellow for actual grid-search (slow)
         best_thresholds = {"SwinSAM-binary": 0.06, "SwinSAM-multi": 0.1, "Swin-GradCAM": 0.8, "Swin-HGI-SAM": 0.06}
-        best_thresholds = {"SwinSAM-binary": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["SwinSAM-binary"], "SwinSAM-binary", device),
-                           "SwinSAM-multi": find_best_threshold(np.arange(0.07, 0.15, 0.01), val_ds, models["SwinSAM-multi"], "SwinSAM-multi", device),
-                           "Swin-GradCAM": find_best_threshold(np.arange(0.5, 1, 0.1), val_ds, models["Swin-GradCAM"], "Swin-GradCAM", device),
-                           "Swin-HGI-SAM": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
+        # best_thresholds = {"SwinSAM-binary": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["SwinSAM-binary"], "SwinSAM-binary", device),
+        #                    "SwinSAM-multi": find_best_threshold(np.arange(0.07, 0.15, 0.01), val_ds, models["SwinSAM-multi"], "SwinSAM-multi", device),
+        #                    "Swin-GradCAM": find_best_threshold(np.arange(0.5, 1, 0.1), val_ds, models["Swin-GradCAM"], "Swin-GradCAM", device),
+        #                    "Swin-HGI-SAM": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
 
         confusion_matrices = {"SwinSAM-binary": ConfusionMatrix(), "SwinSAM-multi": ConfusionMatrix(),
                               "Swin-HGI-SAM": ConfusionMatrix(), "UNet": ConfusionMatrix()}
 
-        pbar_test = tqdm(test_ds, total=len(test_ds), leave=False)
+        pbar_test = tqdm(enumerate(test_ds), total=len(test_ds), leave=False)
         pbar_test.set_description(f'testing fold: {fold_number}')
-        for x, mask, brain, y in pbar_test:
+        for i, (x, mask, brain, y) in pbar_test:
             x, mask, brain = x.to('cuda'), mask.to('cuda'), brain.to('cuda')
 
             logits = {}  # to store the model predictions of input x
@@ -117,6 +124,7 @@ def main():
 
             # measuring segmentation metrics only for slices that have a mask
             predmasks = {"UNet": predmask_unet}
+            predmasks_onehot = {}
             if y[-1] == 1:
                 mask_onehot = to_onehot(mask)
 
@@ -127,44 +135,38 @@ def main():
                 predmasks["SwinSAM-multi"] = models["SwinSAM-multi"].attentional_segmentation(brain)
                 predmasks["Swin-GradCAM"] = models["Swin-GradCAM"].grad_cam_segmentation(x.unsqueeze(0), brain)
                 predmasks["Swin-HGI-SAM"] = models["Swin-HGI-SAM"].attentional_segmentation_grad(brain)
+                # binarization of predmasks
+                for model_name, predmask in predmasks.items():
+                    if model_name == "UNet":
+                        predmask_binary = predmasks[model_name]
+                    else:
+                        predmask_binary = binarization_simple_thresholding(deepcopy(predmasks[model_name]), best_thresholds[model_name])
+                    predmask_binary_onehot = to_onehot(predmask_binary)
+                    predmasks_onehot[model_name] = predmask_binary_onehot
 
+                # computing segmentation metrics
                 for metric_models in seg_metrics.values():
                     for model_name, metric in metric_models.items():
-                        if model_name == "UNet":
-                            predmask_binary = predmasks[model_name]
-                        else:
-                            predmask_binary = binarization_simple_thresholding(deepcopy(predmasks[model_name]), best_thresholds[model_name])
-                        predmask_binary_onehot = to_onehot(predmask_binary)
-                        metric(predmask_binary_onehot.unsqueeze(0), mask_onehot.unsqueeze(0))
-                #############################################
-                # brain_window_np = x[0].cpu().numpy()
-                # mask_np = mask[1].cpu().numpy()
-                # cv2.imshow('extra/samples/image.png', x.permute(1, 2, 0).cpu().numpy())
-                # cv2.imshow('extra/samples/brain-w.png', x[0].cpu().numpy())
-                # # cv2.imshow('extra/samples/subdural-w.png', x[1].cpu().numpy())
-                # # cv2.imshow('extra/samples/bone-w.png', x[2].cpu().numpy())
-                # cv2.imshow('extra/samples/brain.png', brain.squeeze().cpu().numpy())
-                # cv2.imshow('extra/samples/mask.png', mask[1].cpu().numpy())
-                #
-                # cv2.imshow('extra/samples/pred-grad.png', p_mask_grad_b[1].cpu().numpy())
-                # cv2.imshow('extra/samples/pred-mlcn-binary.png', p_mask_mlcn_b[1].cpu().numpy())
-                # cv2.imshow('extra/samples/pred-mlcn-multi.png', p_mask_mlcn_multi_b[1].cpu().numpy())
-                # cv2.imshow('extra/samples/pred-unet.png', p_mask_unet_b[1].cpu().numpy())
-                # cv2.imshow('extra/samples/pred-gradcam.png', p_mask_gradcam_b[1].cpu().numpy())
-                #
-                # cv2.imwrite('extra/samples/brain-window.png', brain_window_np * 256)
-                # method('extra/samples/pred-grad.png', brain_window_np, mask_np, p_mask_grad_b[1].cpu().numpy())
-                # method('extra/samples/pred-mlcn-binary.png', brain_window_np, mask_np, p_mask_mlcn_b[1].cpu().numpy())
-                # method('extra/samples/pred-mlcn-multi.png', brain_window_np, mask_np, p_mask_mlcn_multi_b[1].cpu().numpy())
-                # method('extra/samples/pred-unet.png', brain_window_np, mask_np, p_mask_unet_b[1].cpu().numpy())
-                # method('extra/samples/pred-gradcam.png', brain_window_np, mask_np, p_mask_gradcam_b[1].cpu().numpy())
-                #
-                # cv2.imshow('extra/samples/attention-map-grad.png', p_mask_grad[0].cpu().numpy())
-                # cv2.imshow('extra/samples/attention-map-mlcn-binary.png', p_mask_mlcn[0].cpu().numpy())
-                # cv2.imshow('extra/samples/attention-map-mlcn-multi.png', p_mask_mlcn_multi[0].cpu().numpy())
-                # cv2.imshow('extra/samples/gradcam-map.png', p_mask_gradcam[0].cpu().numpy())
-                #
-                # cv2.waitKey()
+                        metric(predmasks_onehot[model_name].unsqueeze(0), mask_onehot.unsqueeze(0))
+
+                # store segmentation maps
+                if save_visualizations:
+                    sample_dir_path = os.path.join(save_visualizations_dir, f'fold{fold_number}-sample{i:03d}')
+                    if not os.path.isdir(sample_dir_path):
+                        os.mkdir(sample_dir_path)
+                    input_image = x.permute(1, 2, 0).cpu().numpy()
+                    brain_window = x[0].cpu().numpy()
+                    subdural_window = x[1].cpu().numpy()
+                    bone_window = x[2].cpu().numpy()
+                    # storing input image channels
+                    cv2.imwrite(os.path.join(sample_dir_path, "input_image.png"), input_image * 256)
+                    cv2.imwrite(os.path.join(sample_dir_path, "brain_window.png"), brain_window * 256)
+                    cv2.imwrite(os.path.join(sample_dir_path, "subdural_window.png"), subdural_window * 256)
+                    cv2.imwrite(os.path.join(sample_dir_path, "bone_window.png"), bone_window * 256)
+                    # storing predicted segmentations along with ground truth
+                    for model_name, predmask_onehot in predmasks_onehot.items():
+                        save_segmentation_visualization(os.path.join(sample_dir_path, f"{model_name}.png"),
+                                                        brain_window, mask.cpu().numpy(), predmask_onehot[1].cpu().numpy())
 
         # computing confusion matrices for detection metrics
         for cfm in confusion_matrices.values():
@@ -183,34 +185,43 @@ def main():
             print(f'{metric_name}:', end='\t')
             for model_name, metric in metric_models.items():
                 buffer = metric.get_buffer()
-                seg_results[metric_name][model_name].extend(list(buffer.view(-1).cpu().numpy()))
+                seg_results[f'{metric_name}_{model_name}'].extend(list(buffer.view(-1).cpu().numpy()))
                 std_mean = torch.std_mean(buffer)
                 print(f'{model_name}={std_mean[1]:.3f} +/- {std_mean[0]:.3f}', end='\t')
             print()
 
-    # todo: fix it
     seg_results_df = pd.DataFrame(seg_results)
-    seg_results_df.to_csv(r'extra\results\results-new.csv')
+    seg_results_df.to_csv(csv_seg_results_path)
 
-    print('\nOverall subject-based segmentation results:')
+    print('\n', 20 * '#')
+    print('Overall subject-based segmentation results:')
     for metric_name, metric_models in seg_metrics.items():
         print(f'{metric_name}:', end='\t')
         for model_name, metric in metric_models.items():
-            buffer = np.array(seg_results[metric_name][model_name])
-            print(f'{model_name}={np.nanmean(buffer):.3f} +/- {np.nanstd(buffer):.3f}', end='\t')
+            buffer = torch.tensor(seg_results[f'{metric_name}_{model_name}'])
+            print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer.numpy()):.3f}', end='\t')
         print()
 
 
-def method(name, brain, mask, pred):
-    color_brain = np.stack(3 * [brain], axis=-1)
+def save_segmentation_visualization(path, brain_window, mask, predmask):
+    """
+    A method that stores a visualization of segmentation maps on top of a brain-window image,
+    where the ground-truth will be green and prediction will be red.
+
+    :param path: path to save the image
+    :param brain_window: brain-window of the input image
+    :param mask: ground-truth map
+    :param predmask: prediction map
+    """
+    color_brain = np.stack(3 * [brain_window], axis=-1)
     color_pred = np.zeros_like(color_brain)
-    color_pred[..., 2] = pred
+    color_pred[..., 2] = predmask
     color_mask = np.zeros_like(color_brain)
     color_mask[..., 1] = mask
 
     out = color_brain + color_mask + color_pred
     out = (out - out.min()) / (out.max() - out.min()) * 256
-    cv2.imwrite(name, out)
+    cv2.imwrite(path, out)
 
 
 def find_best_threshold(grid_range, val_ds, model, model_name, device='cuda'):
@@ -250,18 +261,4 @@ def find_best_threshold(grid_range, val_ds, model, model_name, device='cuda'):
 
 if __name__ == '__main__':
     main()
-    # m = SwinWeak(3, 2)
-    # #
-    # # swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=3, num_classes=6)
-    # # swin.load_state_dict(torch.load(r"C:\rsna-ich\Good weights\backup\Focal-100-checkpoint-2.pt"))
-    # #
-    # # for name, param in m.swin.state_dict().items():
-    # #     param.copy_(swin.state_dict()[name])
-    # # for name, param in m.head.state_dict().items():
-    # #     param.copy_(swin.head.state_dict()[name])
-    # state_dict = torch.load("extra/weights/backup/SwinWeak_CrossEntropyLoss-grad.pth")
-    # for name, param in m.state_dict().items():
-    #     param.copy_(state_dict[name])
-    # torch.save(m.state_dict(), r"/extra/weights/backup/grad.pth")
-    # load_model(m, "extra/weights/backup/multi.pth")
-    # print(m)
+

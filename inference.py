@@ -1,5 +1,4 @@
 import os
-
 import torch
 import timm
 from helpers.dataset import *
@@ -8,17 +7,13 @@ from models.swin_weak import SwinWeak
 import cv2
 from helpers.utils import *
 import numpy as np
-from monai.metrics import DiceMetric, MeanIoU, HausdorffDistanceMetric, compute_meandice
+from monai.metrics import DiceMetric, MeanIoU
 from models.unet import UNet
 from torch.utils.data import Subset
 from tqdm import tqdm
 from copy import deepcopy
 import pandas as pd
-from skimage import morphology
-import matplotlib.pyplot as plt
-# from segmentation_mask_overlay import overlay_masks
 import cv2
-import time
 import argparse
 import json
 
@@ -39,7 +34,7 @@ def main():
                       "SwinSAM-multi": config_dict["SwinSAM-multi_path"],
                       "Swin-GradCAM": config_dict["Swin-GradCAM_path"],
                       "Swin-HGI-SAM": config_dict["Swin-HGI-SAM_path"],
-                      "UNet": config_dict["UNet_path"]}
+                      "UNet": config_dict["UNet_dir_path"]}
     if torch.cuda.is_available():
         device = 'cuda'
     else:
@@ -58,11 +53,11 @@ def main():
         val_indices = [x for x in range(0, len(ds.labels)) if x not in test_indices]
         val_ds = Subset(ds, val_indices)  # used in weakly supervised models only to find the optimum threshold for binarization
 
-        models = {"SwinSAM-binary": SwinWeak(in_ch=3, num_classes=1),  # here, we use sigmoid + rounding to do binary classification
-                  "SwinSAM-multi": SwinWeak(in_ch=3, num_classes=6),
+        models = {"SwinSAM-binary": SwinWeak(in_ch=3, num_classes=1, pretrained=False),  # here, we use sigmoid + rounding to do binary classification
+                  "SwinSAM-multi": SwinWeak(in_ch=3, num_classes=6, pretrained=False),
                   # in following, we use softmax + argmax to do binary classification,
-                  "Swin-GradCAM": SwinWeak(in_ch=3, num_classes=2),
-                  "Swin-HGI-SAM": SwinWeak(in_ch=3, num_classes=2),
+                  "Swin-GradCAM": SwinWeak(in_ch=3, num_classes=2, pretrained=False),
+                  "Swin-HGI-SAM": SwinWeak(in_ch=3, num_classes=2, pretrained=False),
                   "UNet": UNet(in_ch=3, num_classes=2, embed_dims=[24, 48, 96, 192])}
 
         for model_name, model in models.items():
@@ -89,80 +84,58 @@ def main():
                                 "UNet": MeanIoU(include_background=False, reduction='none')}
                        }
 
+        # thresholds for prediction mask binarization. Uncomment bellow for actual grid-search (slow)
         best_thresholds = {"SwinSAM-binary": 0.06, "SwinSAM-multi": 0.1, "Swin-GradCAM": 0.8, "Swin-HGI-SAM": 0.06}
-        # best_thresholds = {"SwinSAM-binary": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["SwinSAM-binary"], "SwinSAM-binary", device),
-        #                    "SwinSAM-multi": find_best_threshold(np.arange(0.07, 0.15, 0.01), val_ds, models["SwinSAM-multi"], "SwinSAM-multi", device),
-        #                    "Swin-GradCAM": find_best_threshold(np.arange(0.5, 1, 0.1), val_ds, models["Swin-GradCAM"], "Swin-GradCAM", device),
-        #                    "Swin-HGI-SAM": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
+        best_thresholds = {"SwinSAM-binary": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["SwinSAM-binary"], "SwinSAM-binary", device),
+                           "SwinSAM-multi": find_best_threshold(np.arange(0.07, 0.15, 0.01), val_ds, models["SwinSAM-multi"], "SwinSAM-multi", device),
+                           "Swin-GradCAM": find_best_threshold(np.arange(0.5, 1, 0.1), val_ds, models["Swin-GradCAM"], "Swin-GradCAM", device),
+                           "Swin-HGI-SAM": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
 
         confusion_matrices = {"SwinSAM-binary": ConfusionMatrix(), "SwinSAM-multi": ConfusionMatrix(),
                               "Swin-HGI-SAM": ConfusionMatrix(), "UNet": ConfusionMatrix()}
 
-        pbar_test = tqdm(val_ds, total=len(val_ds), leave=False)
+        pbar_test = tqdm(test_ds, total=len(test_ds), leave=False)
         pbar_test.set_description(f'testing fold: {fold_number}')
         for x, mask, brain, y in pbar_test:
             x, mask, brain = x.to('cuda'), mask.to('cuda'), brain.to('cuda')
 
-            p_mlcn_multi = model_mlcn_multi(deepcopy(x.unsqueeze(0)))
-            mlcn_predictin_multi = torch.round(torch.sigmoid(p_mlcn_multi)).view(-1)
+            logits = {}  # to store the model predictions of input x
+            for model_name, model in models.items():
+                logits[model_name] = model(deepcopy(x.unsqueeze(0)))
 
-            p_mlcn = model_mlcn_binary(deepcopy(x.unsqueeze(0)))
-            mlcn_predictin = torch.round(torch.sigmoid(p_mlcn))
+            pred_swin_sam_binary = torch.round(torch.sigmoid(logits["SwinSAM-binary"]))
+            pred_swin_sam_multi = torch.round(torch.sigmoid(logits["SwinSAM-multi"])).view(-1)
+            pred_swin_hgi_sam = torch.argmax(torch.softmax(logits["Swin-HGI-SAM"], dim=1), dim=1)
+            predmask_unet = torch.argmax(torch.softmax(logits["UNet"], dim=1), dim=1)
+            pred_unet = torch.Tensor([1]) if predmask_unet.sum() > 10 else torch.Tensor([0])
+            pred_unet = pred_unet.to(device)
 
-            p_grad = model_grad(deepcopy(x.unsqueeze(0)))
-            grad_prediction = torch.argmax(p_grad, dim=1)
-            #############################################
-            p_mask_unet = model_unet(x.unsqueeze(0)).detach()
-            p_mask_unet = torch.softmax(p_mask_unet, dim=1)
-            p_mask_unet_b = torch.argmax(deepcopy(p_mask_unet), dim=1)
-            unet_prediction = torch.Tensor([1]) if p_mask_unet_b.sum() > 10 else torch.Tensor([0])
-            unet_prediction = unet_prediction.to('cuda')
+            confusion_matrices["SwinSAM-binary"].add_prediction(pred_swin_sam_binary, y[-1:])
+            confusion_matrices["SwinSAM-multi"].add_prediction(pred_swin_sam_multi[-1:], y[-1:])
+            confusion_matrices["Swin-HGI-SAM"].add_prediction(pred_swin_hgi_sam, y[-1:])
+            confusion_matrices["UNet"].add_prediction(pred_unet, y[-1:])
 
-            cfm_mlcn_binary.add_prediction(mlcn_predictin, y[-1])
-            cfm_mlcn_multi.add_prediction(mlcn_predictin_multi[-1:], y[-1])
-            cfm_gradsam.add_prediction(grad_prediction, y[-1])
-            cfm_unet.add_prediction(unet_prediction, y[-1])
+            # measuring segmentation metrics only for slices that have a mask
+            predmasks = {"UNet": predmask_unet}
             if y[-1] == 1:
-                mask = to_onehot(m)
-                ##########################################
-                start_time = time.time()
-                foregrounds = p_grad[:, 1].sum()
-                foregrounds.backward()
-                p_mask_grad = model_grad.attentional_segmentation_grad(brain)
-                p_mask_grad_b = binarization_simple_thresholding(deepcopy(p_mask_grad), best_th_grad)
-                p_mask_grad_b = to_onehot(p_mask_grad_b)
-                gradsam_total_time += time.time() - start_time
-                #####################################################
-                start_time = time.time()
-                p_mask_gradcam = model_grad.grad_cam_segmentation(x.unsqueeze(0), brain)
-                p_mask_gradcam_b = binarization_simple_thresholding(deepcopy(p_mask_gradcam), best_th_gradcam)
-                p_mask_gradcam_b = to_onehot(p_mask_gradcam_b)
-                gradcam_total_time += time.time() - start_time
-                ##################################################
-                start_time = time.time()
-                p_mask_mlcn_multi = model_mlcn_multi.attentional_segmentation(brain)
-                p_mask_mlcn_multi_b = binarization_simple_thresholding(deepcopy(p_mask_mlcn_multi), best_th_mlcn_multi)
-                p_mask_mlcn_multi_b = to_onehot(p_mask_mlcn_multi_b)
-                mlcn_multi_total_time += time.time() - start_time
-                ##################################################
-                start_time = time.time()
-                p_mask_mlcn = model_mlcn_binary.attentional_segmentation(brain)
-                p_mask_mlcn_b = binarization_simple_thresholding(deepcopy(p_mask_mlcn), best_th_weight)
-                p_mask_mlcn_b = to_onehot(p_mask_mlcn_b)
-                mlcn_binary_total_time += time.time() - start_time
-                ##############################################
-                p_mask_unet_b = to_onehot(p_mask_unet_b)
-                #############################################
-                dice_grad(p_mask_grad_b.unsqueeze(0), mask.unsqueeze(0))
-                iou_grad(p_mask_grad_b.unsqueeze(0), mask.unsqueeze(0))
-                dice_weight(p_mask_mlcn_b.unsqueeze(0), mask.unsqueeze(0))
-                iou_weight(p_mask_mlcn_b.unsqueeze(0), mask.unsqueeze(0))
-                dice_mlcn_multi(p_mask_mlcn_multi_b.unsqueeze(0), mask.unsqueeze(0))
-                iou_mlcn_multi(p_mask_mlcn_multi_b.unsqueeze(0), mask.unsqueeze(0))
-                dice_unet(p_mask_unet_b.unsqueeze(0), mask.unsqueeze(0))
-                iou_unet(p_mask_unet_b.unsqueeze(0), mask.unsqueeze(0))
-                dice_gradcam(p_mask_gradcam_b.unsqueeze(0), mask.unsqueeze(0))
-                iou_gradcam(p_mask_gradcam_b.unsqueeze(0), mask.unsqueeze(0))
+                mask_onehot = to_onehot(mask)
+
+                # computing all prediction masks
+                hgi_foregrounds = logits["Swin-HGI-SAM"][:, 1].sum()
+                hgi_foregrounds.backward()
+                predmasks["SwinSAM-binary"] = models["SwinSAM-binary"].attentional_segmentation(brain)
+                predmasks["SwinSAM-multi"] = models["SwinSAM-multi"].attentional_segmentation(brain)
+                predmasks["Swin-GradCAM"] = models["Swin-GradCAM"].grad_cam_segmentation(x.unsqueeze(0), brain)
+                predmasks["Swin-HGI-SAM"] = models["Swin-HGI-SAM"].attentional_segmentation_grad(brain)
+
+                for metric_models in seg_metrics.values():
+                    for model_name, metric in metric_models.items():
+                        if model_name == "UNet":
+                            predmask_binary = predmasks[model_name]
+                        else:
+                            predmask_binary = binarization_simple_thresholding(deepcopy(predmasks[model_name]), best_thresholds[model_name])
+                        predmask_binary_onehot = to_onehot(predmask_binary)
+                        metric(predmask_binary_onehot.unsqueeze(0), mask_onehot.unsqueeze(0))
                 #############################################
                 # brain_window_np = x[0].cpu().numpy()
                 # mask_np = mask[1].cpu().numpy()
@@ -193,61 +166,39 @@ def main():
                 #
                 # cv2.waitKey()
 
-        cfm_mlcn_binary.compute_confusion_matrix()
-        cfm_mlcn_multi.compute_confusion_matrix()
-        cfm_gradsam.compute_confusion_matrix()
-        cfm_unet.compute_confusion_matrix()
-        print('fold', fold_number)
-        # print('\ngrad: dice=', torch.std_mean(dice_grad.get_buffer()), 'iou=', torch.std_mean(iou_grad.get_buffer()), '\n',
-        #       'accuracy=', cfm_gradsam.get_accuracy(), 'precision=', cfm_gradsam.get_precision(), 'recall', cfm_gradsam.get_recall_sensitivity(),
-        #       'F1=', cfm_gradsam.get_f1_score(), 'Specificity=', cfm_gradsam.get_specificity(), "AUC=", cfm_gradsam.get_auc_score())
-        print('avg time=', gradsam_total_time / num_samples)
-        dices_grad.extend(list(dice_grad.get_buffer().view(-1).cpu().numpy()))
-        ious_grad.extend(list(iou_grad.get_buffer().view(-1).cpu().numpy()))
+        # computing confusion matrices for detection metrics
+        for cfm in confusion_matrices.values():
+            cfm.compute_confusion_matrix()
 
-        # print('\nmlcn binary: dice=', torch.std_mean(dice_weight.get_buffer()), 'iou=', torch.std_mean(iou_weight.get_buffer()), '\n',
-        #       'accuracy=', cfm_mlcn_binary.get_accuracy(), 'precision=', cfm_mlcn_binary.get_precision(), 'recall', cfm_mlcn_binary.get_recall_sensitivity(),
-        #       'F1=', cfm_mlcn_binary.get_f1_score(), 'Specificity=', cfm_mlcn_binary.get_specificity(), "AUC=", cfm_mlcn_binary.get_auc_score())
-        print('avg time=', mlcn_binary_total_time / num_samples)
-        dices_SwinSAM.extend(list(dice_weight.get_buffer().view(-1).cpu().numpy()))
-        ious_weight.extend(list(iou_weight.get_buffer().view(-1).cpu().numpy()))
+        # printing results
+        print(f'Fold {fold_number}:')
+        print('Detection results:')
+        for model_name, cfm in confusion_matrices.items():
+            print(f'{model_name}:', end='\t')
+            print(f'\t Accuracy={cfm.get_accuracy():.3f} \t Precision={cfm.get_precision():.3f} \t Recall={cfm.get_recall_sensitivity():.3f} '
+                  f'\t F1={cfm.get_f1_score():.3f} \t Specificity={cfm.get_specificity():.3f} \t AUC={cfm.get_auc_score():.3f}')
 
-        # print('\nmlcn multi: dice=', torch.std_mean(dice_mlcn_multi.get_buffer()), 'iou=', torch.std_mean(iou_mlcn_multi.get_buffer()), '\n',
-        #       'accuracy=', cfm_mlcn_multi.get_accuracy(), 'precision=', cfm_mlcn_multi.get_precision(), 'recall', cfm_mlcn_multi.get_recall_sensitivity(),
-        #       'F1=', cfm_mlcn_multi.get_f1_score(), 'Specificity=', cfm_mlcn_multi.get_specificity(), "AUC=", cfm_mlcn_multi.get_auc_score())
-        print('avg time=', mlcn_multi_total_time / num_samples)
-        dices_mlcn_multi.extend(list(dice_mlcn_multi.get_buffer().view(-1).cpu().numpy()))
-        ious_mlcn_multi.extend(list(iou_mlcn_multi.get_buffer().view(-1).cpu().numpy()))
+        print('\nSegmentation results:')
+        for metric_name, metric_models in seg_metrics.items():
+            print(f'{metric_name}:', end='\t')
+            for model_name, metric in metric_models.items():
+                buffer = metric.get_buffer()
+                seg_results[metric_name][model_name].extend(list(buffer.view(-1).cpu().numpy()))
+                std_mean = torch.std_mean(buffer)
+                print(f'{model_name}={std_mean[1]:.3f} +/- {std_mean[0]:.3f}', end='\t')
+            print()
 
-        # print('\nunet: dice=', torch.std_mean(dice_unet.get_buffer()), 'iou=', torch.std_mean(iou_unet.get_buffer()), '\n',
-        #       'accuracy=', cfm_unet.get_accuracy(), 'precision=', cfm_unet.get_precision(), 'recall', cfm_unet.get_recall_sensitivity(),
-        #       'F1=', cfm_unet.get_f1_score(), 'Specificity=', cfm_unet.get_specificity(), "AUC=", cfm_unet.get_auc_score())
-        print('avg time=', unet_total_time / num_samples)
-        dices_unet.extend(list(dice_unet.get_buffer().view(-1).cpu().numpy()))
-        ious_unet.extend(list(iou_unet.get_buffer().view(-1).cpu().numpy()))
+    # todo: fix it
+    seg_results_df = pd.DataFrame(seg_results)
+    seg_results_df.to_csv(r'extra\results\results-new.csv')
 
-        # print('\ngrad cam: dice=', torch.nanmean(dice_gradcam.get_buffer()), np.nanstd(dice_gradcam.get_buffer().cpu().numpy()),
-        #       'iou=', torch.nanmean(iou_gradcam.get_buffer()), np.nanstd(iou_gradcam.get_buffer().cpu().numpy()))
-        print('avg time=', gradcam_total_time / num_samples)
-        dices_gradcam.extend(list(dice_gradcam.get_buffer().view(-1).cpu().numpy()))
-        ious_gradcam.extend(list(iou_gradcam.get_buffer().view(-1).cpu().numpy()))
-
-    res = {'dice_mlcn_binary': dices_SwinSAM, 'dice_mlcn_multi': dices_mlcn_multi, 'dice_grad': dices_grad, 'dice_unet': dices_unet, 'dice_gradcam': dices_gradcam,
-           'iou_mlcn_binary': ious_weight, 'iou_mlcn_multi': ious_mlcn_multi, 'iou_grad': ious_grad, 'iou_unet': ious_unet, 'iou_gradcam': ious_gradcam}
-    df = pd.DataFrame(res)
-    df.to_csv(r'extra\results\results.csv')
-
-    print('overall subject based:')
-    print('dice_mlcn_binary', torch.std_mean(torch.tensor(dices_SwinSAM)))
-    print('dice_mlcn_multi', torch.std_mean(torch.tensor(dices_mlcn_multi)))
-    print('dice_grad', torch.std_mean(torch.tensor(dices_grad)))
-    print('dices_unet', torch.std_mean(torch.tensor(dices_unet)))
-    print('dices_gradcam', np.nanstd(np.array(dices_gradcam)), np.nanmean(np.array(dices_gradcam)))
-    print('iou_mlcn_binary', torch.std_mean(torch.tensor(ious_weight)))
-    print('ious_mlcn_multi', torch.std_mean(torch.tensor(ious_mlcn_multi)))
-    print('ious_grad', torch.std_mean(torch.tensor(ious_grad)))
-    print('iou_unet', torch.std_mean(torch.tensor(ious_unet)))
-    print('ious_gradcam', np.nanstd(np.array(ious_gradcam)), np.nanmean(np.array(ious_gradcam)))
+    print('\nOverall subject-based segmentation results:')
+    for metric_name, metric_models in seg_metrics.items():
+        print(f'{metric_name}:', end='\t')
+        for model_name, metric in metric_models.items():
+            buffer = np.array(seg_results[metric_name][model_name])
+            print(f'{model_name}={np.nanmean(buffer):.3f} +/- {np.nanstd(buffer):.3f}', end='\t')
+        print()
 
 
 def method(name, brain, mask, pred):
@@ -299,15 +250,18 @@ def find_best_threshold(grid_range, val_ds, model, model_name, device='cuda'):
 
 if __name__ == '__main__':
     main()
-    # m = SwinWeak(3, 6)
-    #
-    # swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=3, num_classes=6)
-    # swin.load_state_dict(torch.load(r"C:\rsna-ich\Good weights\backup\Focal-100-checkpoint-2.pt"))
-    #
-    # for name, param in m.swin.state_dict().items():
-    #     param.copy_(swin.state_dict()[name])
-    # for name, param in m.head.state_dict().items():
-    #     param.copy_(swin.head.state_dict()[name])
-    # torch.save(m.state_dict(), r"D:\Projects\MELBA\extra\weights\multi.pth")
-    # load_model(m.swin)
+    # m = SwinWeak(3, 2)
+    # #
+    # # swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=3, num_classes=6)
+    # # swin.load_state_dict(torch.load(r"C:\rsna-ich\Good weights\backup\Focal-100-checkpoint-2.pt"))
+    # #
+    # # for name, param in m.swin.state_dict().items():
+    # #     param.copy_(swin.state_dict()[name])
+    # # for name, param in m.head.state_dict().items():
+    # #     param.copy_(swin.head.state_dict()[name])
+    # state_dict = torch.load("extra/weights/backup/SwinWeak_CrossEntropyLoss-grad.pth")
+    # for name, param in m.state_dict().items():
+    #     param.copy_(state_dict[name])
+    # torch.save(m.state_dict(), r"/extra/weights/backup/grad.pth")
+    # load_model(m, "extra/weights/backup/multi.pth")
     # print(m)

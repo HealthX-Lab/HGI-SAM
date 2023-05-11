@@ -133,7 +133,7 @@ class PhysioNetICHDataset(Dataset):
         image = self.slices[item]
         mask = self.masks[item]
         brain = self.brains[item]
-        label = self.labels[item]
+        label = torch.LongTensor(self.labels[item])
 
         if mask.max() > 0:  # 0-1 normalization
             mask = (mask - mask.min()) / (mask.max() - mask.min())

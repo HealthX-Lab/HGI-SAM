@@ -5,15 +5,16 @@ from pytorch_grad_cam import GradCAM
 
 
 class SwinWeak(nn.Module):
-    def __init__(self, in_ch, num_classes):
+    def __init__(self, in_ch, num_classes, pretrained=True):
         """
         A Swin transformer class that extracts attention weights and their respective gradients to do weakly supervised segmentation
 
         :param in_ch: number of input image channels
         :param num_classes: number of classes in classification task
+        :param pretrained: whether to use a pretrained on imagenet weights as initial point
         """
         super().__init__()
-        self.swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=in_ch, num_classes=-1, pretrained=True)
+        self.swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=in_ch, num_classes=-1, pretrained=pretrained)
         self.head = nn.Linear(1024, num_classes)
 
         # defining forward and backward hooks on attention weights to get the weights and their gradients

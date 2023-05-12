@@ -2,10 +2,8 @@ import torch.nn as nn
 import torch
 import numpy as np
 import cv2
-import torch.nn.functional as F
 from sklearn import metrics
 from skimage.filters import threshold_otsu
-from monai.metrics.utils import get_mask_edges, get_surface_distance
 import matplotlib.pyplot as plt
 from monai.transforms.post.array import one_hot
 from typing import List, cast
@@ -13,6 +11,10 @@ from torch import Tensor, einsum
 
 
 def simplex(t: Tensor, axis=1) -> bool:
+    """
+    A helper function used to make sure tensors are onehot like
+    All rights reserved to: https://github.com/LIVIAETS/boundary-loss
+    """
     _sum = cast(Tensor, t.sum(axis).type(torch.float32))
     _ones = torch.ones_like(_sum, dtype=torch.float32)
     return torch.allclose(_sum, _ones)
@@ -20,6 +22,10 @@ def simplex(t: Tensor, axis=1) -> bool:
 
 class CrossEntropy(nn.Module):
     def __init__(self, **kwargs):
+        """
+        A class to compute Cross Entropy Loss.
+        All rights reserved to: https://github.com/LIVIAETS/boundary-loss
+        """
         # Self.idc is used to filter out some classes of the target mask. Use fancy indexing
         super().__init__()
         self.idc: List[int] = kwargs["idc"]
@@ -39,6 +45,10 @@ class CrossEntropy(nn.Module):
 
 class DiceLoss(nn.Module):
     def __init__(self, **kwargs):
+        """
+        A class to compute Dice Loss.
+        All rights reserved to: https://github.com/LIVIAETS/boundary-loss
+        """
         # Self.idc is used to filter out some classes of the target mask. Use fancy indexing
         super().__init__()
         self.idc: List[int] = kwargs["idc"]
@@ -62,6 +72,11 @@ class DiceLoss(nn.Module):
 
 class ConfusionMatrix:
     def __init__(self, device='cuda'):
+        """
+        A class built to save predictions, store model performance metrics, and carry out confusion matrix operations
+
+        :param device: device where to do the torch computations
+        """
         self.device = device
         self.predictions = []
         self.ground_truth = []
@@ -161,6 +176,11 @@ class ConfusionMatrix:
 
 class DiceCELoss(nn.Module):
     def __init__(self, alpha=0.5):
+        """
+        A combo loss class at combines Cross Entropy and Dice Loss
+
+        :param alpha: ratio of the Cross Entropy Loss in the final loss
+        """
         super().__init__()
         assert alpha <= 1
         self.ce_loss = CrossEntropy(idc=[0, 1])
@@ -174,6 +194,14 @@ class DiceCELoss(nn.Module):
 
 class EarlyStopping:
     def __init__(self, model: nn.Module, patience: int, path_to_save: str, gamma=0):
+        """
+        A class that is used to track the validation loss of a training and stop it if it does not decrease
+
+        :param model: pytorch model
+        :param patience: for how many epochs we continue training until early stopping
+        :param path_to_save: saving path for the best performing model on validation data so far.
+        :param gamma: the least difference that validation loss must decrease
+        """
         assert patience > 0, 'patience must be positive'
         self.model = model
         self.patience = patience
@@ -200,53 +228,45 @@ class EarlyStopping:
 
 
 def save_model(model: nn.Module, path: str):
+    """
+    a method save weights of a model
+
+    :param model: pytorch model
+    :param path: saving path of the state dictionary of the model
+    """
     torch.save(model.state_dict(), path)
 
 
 def load_model(model: nn.Module, path: str):
+    """
+    a method to load weights of a model
+
+    :param model: pytorch model
+    :param path: path to state dictionary of the model
+    """
     model.load_state_dict(torch.load(path))
 
 
-def dice_metric(predicted_mask, gt_mask):
-    p = torch.count_nonzero(predicted_mask > 0, dim=(1, 2))
-    gt = torch.count_nonzero(gt_mask > 0, dim=(1, 2))
-    overlap = torch.count_nonzero((predicted_mask * gt_mask) > 0, dim=(1, 2))
-    return 2 * overlap / (p + gt)
-
-
-def intersection_over_union(predicted_mask, gt_mask):
-    intersection = torch.count_nonzero((predicted_mask * gt_mask) > 0, dim=(1, 2))
-    union = torch.count_nonzero((predicted_mask + gt_mask) > 0, dim=(1, 2))
-    return intersection / union
-
-
-def hausdorff_distance(pred, gt):
-    max_dist = np.sqrt(gt.shape[1] ** 2 + gt.shape[2] ** 2)
-    distances = torch.zeros(gt.shape[0])
-    for image_index in range(gt.shape[0]):
-        if torch.all(torch.eq(pred[image_index], gt[image_index])):
-            distances[image_index] = 0.0
-            continue
-        (edges_pred, edges_gt) = get_mask_edges(pred[image_index], gt[image_index])
-        surface_distance = get_surface_distance(edges_pred, edges_gt, distance_metric="euclidean")
-        if surface_distance.shape == (0,):
-            distances[image_index] = 0.0
-            continue
-        dist = surface_distance.max()
-        if dist > max_dist:
-            distances[image_index] = 1.0
-            continue
-        distances[image_index] = dist / max_dist
-    return distances
-
-
 def binarization_simple_thresholding(image, threshold):
+    """
+    a method that applies a simple thresholding on a 2D image and binarizes it
+
+    :param image: input image (prediction map)
+    :param threshold: threshold value
+    :return: binary image
+    """
     image[image < threshold] = 0
     image[image >= threshold] = 1
     return image
 
 
 def binarization_otsu(image):
+    """
+    a method that applies an OTSU thresholding on a 2D image and binarizes it
+
+    :param image: input image (prediction map)
+    :return: binary image
+    """
     binarized_image = torch.zeros_like(image)
     for index in range(binarized_image.shape[0]):
         im = image[index]
@@ -261,48 +281,33 @@ def binarization_otsu(image):
     return binarized_image
 
 
-def show_image(window_name, image):
-    for i in range(image.shape[0]):  # iterate over images in batch
-        if image.dim() == 3:
-            cv2.imshow(f'{window_name}-{i}', image[i].cpu().numpy())
-        elif image.shape[1] == 1:
-            cv2.imshow(f'{window_name}-{i}', image[i, 0].cpu().numpy())
-        else:  # colored image
-            cv2.imshow(f'{window_name}-{i}', image[i].permute(1, 2, 0).cpu().numpy())
-    cv2.waitKey()
-
-
 def str_to_bool(string):
+    """
+    Helper method that converts a string into boolean
+
+    :param string: either True or False
+    """
     return True if string == "True" else False
 
 
 def visualize_losses(train_losses, valid_losses, path_to_save):
+    """
+    A method used to plot the train and validation losses of a training, which are showed in two rows respectively.
+
+    :param train_losses: list of train losses
+    :param valid_losses: list of validation losses
+    :param path_to_save: path to save the figure
+    """
     fig, axes = plt.subplots(2)
     axes[0].plot(train_losses)
     axes[1].plot(valid_losses)
     plt.savefig(path_to_save)
 
 
-class FocalLoss(nn.Module):
-    def __init__(self, gamma=2, weight=None, reduction='mean'):
-        super(FocalLoss, self).__init__()
-        self.gamma = gamma
-        self.weight = weight
-        self.reduction = reduction
-
-    def forward(self, inputs, targets):
-        """
-        input: [N, C], float32
-        target: [N, ], int64
-        """
-        logpt = F.log_softmax(inputs, dim=1)
-        pt = torch.exp(logpt)
-        logpt = (1 - pt) ** self.gamma * logpt
-        loss = F.nll_loss(logpt, targets, self.weight, reduction=self.reduction)
-        return loss
-
-
 def reshape_transform(height, width):
+    """
+    A helper method to reshape the tensors used in GradCAM approach
+    """
     def reshape(tensor):
         result = tensor.reshape(tensor.size(0),
             height, width, tensor.size(2))
@@ -316,6 +321,12 @@ def reshape_transform(height, width):
 
 
 def to_onehot(tensor):
+    """
+    A helper method to convert a binary tensor into a onehot tensor
+
+    :param tensor: input binary tensor
+    :return: onehot tensor
+    """
     onehot = torch.zeros(2, *tensor.shape[1:], device=tensor.device)
     onehot[1] = tensor
     onehot[0] = 1 - tensor

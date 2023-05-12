@@ -1,6 +1,3 @@
-import os
-import torch
-import timm
 from helpers.dataset import *
 from helpers.preprocessing import get_transform
 from models.swin_weak import SwinWeak

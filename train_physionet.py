@@ -7,16 +7,14 @@ import torch
 import pickle
 from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 from torch.optim import AdamW
-from sklearn.model_selection import StratifiedKFold, train_test_split
-from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
 from collections import Counter
 
 from helpers.preprocessing import Augmentation, get_transform
-from helpers.utils import EarlyStopping, ConfusionMatrix, dice_metric, hausdorff_distance, intersection_over_union, binarization_otsu, binarization_simple_thresholding, load_model
 from helpers.dataset import PhysioNetICHDataset, physio_collate_image_mask, physionet_cross_validation_split
 from models.unet import UNet
 from helpers.trainer import train
-from helpers.utils import str_to_bool, DiceCELoss
+from helpers.utils import str_to_bool, DiceCELoss, EarlyStopping
 
 
 def main():

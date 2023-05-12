@@ -17,4 +17,5 @@ You can download the two datasets used in this study from the following links:
 1) [RSNA Intracranial Hemorrhage Dataset](https://www.kaggle.com/competitions/rsna-intracranial-hemorrhage-detection/data)
 2) [PhysioNet Intracranial Hemorrhage Dataset](https://physionet.org/content/ct-ich/1.3.1/)
 
-For the codes using PhysioNet dataset (fully supervised UNet and inference code) to be able to run, a directory containing brain-masks of scans must be put in the PhysioNet dataset root directory.
+For the codes using PhysioNet dataset (fully supervised UNet and inference code) to be able to run, brain-masks of scans are needed. A zip file of such directory is provided in [extra]() folder.
+It has to be unzipped and put in the PhysioNet dataset root directory.

@@ -1,0 +1,17 @@
+{
+  "img_size": 384,
+  "in_ch": 3,
+  "num_classes": 2,
+
+  "epochs": -1,
+  "batch_size": 8,
+  "num_workers": 4,
+  "lr": 1e-5,
+  "do_augmentation": "True",
+  "do_sampling": "True",
+  "do_finetune": "True",
+  "validation_ratio": 0.1,
+
+  "data_path": "C:\\rsna-ich",
+  "extra_path": "extra\\"
+}

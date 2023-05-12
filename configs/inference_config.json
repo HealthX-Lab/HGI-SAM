@@ -1,0 +1,14 @@
+{
+  "data_path": "C:\\physio-ich",
+  "extra_path": "extra\\",
+
+  "SwinSAM-binary_path": "extra/weights/backup/SwinWeak_FocalBinaryCrossEntropyLoss-binary.pth",
+  "SwinSAM-multi_path": "extra/weights/backup/SwinWeak_FocalBinaryCrossEntropyLoss-multi.pth",
+  "Swin-GradCAM_path": "extra/weights/backup/SwinWeak_CrossEntropyLoss.pth",
+  "Swin-HGI-SAM_path": "extra/weights/backup/SwinWeak_CrossEntropyLoss.pth",
+  "UNet_dir_path": "extra/weights/backup",
+
+  "csv_seg_results_path": "extra/results/seg_results.csv",
+  "save_visualizations": "False",
+  "save_visualizations_dir": "extra/segmentations"
+}

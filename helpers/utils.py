@@ -304,20 +304,12 @@ def visualize_losses(train_losses, valid_losses, path_to_save):
     plt.savefig(path_to_save)
 
 
-def reshape_transform(height, width):
+def reshape_transform(tensor):
     """
     A helper method to reshape the tensors used in GradCAM approach
     """
-    def reshape(tensor):
-        result = tensor.reshape(tensor.size(0),
-            height, width, tensor.size(2))
-
-        # Bring the channels to the first dimension,
-        # like in CNNs.
-        result = result.transpose(2, 3).transpose(1, 2)
-        return result
-
-    return reshape
+    result = tensor.transpose(2, 3).transpose(1, 2)
+    return result
 
 
 def to_onehot(tensor):

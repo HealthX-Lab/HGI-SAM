@@ -2,6 +2,7 @@ from helpers.utils import *
 import timm
 from collections import OrderedDict
 from pytorch_grad_cam import GradCAM
+import torch.nn.functional as F
 
 
 class SwinWeak(nn.Module):
@@ -14,7 +15,8 @@ class SwinWeak(nn.Module):
         :param pretrained: whether to use a pretrained on imagenet weights as initial point
         """
         super().__init__()
-        self.swin = timm.models.swin_base_patch4_window12_384_in22k(in_chans=in_ch, num_classes=-1, pretrained=pretrained)
+        self.swin = timm.create_model('swin_base_patch4_window12_384.ms_in22k_ft_in1k', in_chans=in_ch, num_classes=-1, pretrained=pretrained)
+
         self.head = nn.Linear(1024, num_classes)
 
         # defining forward and backward hooks on attention weights to get the weights and their gradients
@@ -75,7 +77,7 @@ class SwinWeak(nn.Module):
         :return: segmentation map
         """
         # defining the last block norm layer as the GradCAM target layer
-        gcam_layer = GradCAM(model=self, target_layers=[self.swin.layers[-1].blocks[-1].norm1], use_cuda=True, reshape_transform=reshape_transform(12, 12))
+        gcam_layer = GradCAM(model=self, target_layers=[self.swin.layers[-1].blocks[-1].norm1], use_cuda=True, reshape_transform=reshape_transform)
         gcam_map = torch.tensor(gcam_layer(x), device=brain.device, dtype=brain.dtype)
         gcam_map *= brain
 

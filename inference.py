@@ -258,4 +258,3 @@ def find_best_threshold(grid_range, val_ds, model, model_name, device='cuda'):
 
 if __name__ == '__main__':
     main()
-

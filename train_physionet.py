@@ -1,8 +1,11 @@
 import os
 import argparse
 import json
+
+import monai.networks.nets
 import numpy as np
 import statistics
+import monai
 import torch
 import pickle
 from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
@@ -38,6 +41,7 @@ def main():
     data_path = config_dict["data_path"]
     extra_path = config_dict["extra_path"]
 
+    model_name = config_dict["model_name"]
     in_ch = config_dict["in_ch"]
     num_classes = config_dict["num_classes"]
     embed_dims = list(config_dict["embed_dims"])
@@ -52,7 +56,7 @@ def main():
     # brain and bone window parameters are derived from the dataset paper. Subdural window params is adapted based on RSNA one, and these two ds differences.
     ds = PhysioNetICHDataset(data_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
     all_indices = np.arange(0, len(ds.labels))
-    for cf in range(4, folds):
+    for cf in range(0, folds):
         # get the indices for train, validation and test sets.
         with open(os.path.join(extra_path, "folds_division", f"fold{cf}.pt"), "rb") as test_indices_file:
             test_indices = pickle.load(test_indices_file)
@@ -60,7 +64,10 @@ def main():
         # train/validation division is only based on whether hemorrhages exist, not the subtypes
         train_indices, valid_indices = train_test_split(train_valid_indices, stratify=ds.labels[train_valid_indices, -1], test_size=validation_ratio, random_state=42)
 
-        model = UNet(in_ch=in_ch, num_classes=num_classes, embed_dims=embed_dims)
+        if model_name == "UNet":
+            model = UNet(in_ch=in_ch, num_classes=num_classes, embed_dims=embed_dims)
+        else:
+            model = monai.networks.nets.SwinUNETR(img_size=(384, 384), in_channels=in_ch, out_channels=num_classes, spatial_dims=2)
         # we use a combo loss to overcome to problem of imbalanced foreground/background pixels.
         loss_fn = DiceCELoss()
         checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__

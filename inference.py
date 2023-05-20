@@ -89,11 +89,11 @@ def main():
                        }
 
         # thresholds for prediction mask binarization. Uncomment bellow for actual grid-search (slow)
-        best_thresholds = {"SwinSAM-binary": 0.06, "SwinSAM-multi": 0.1, "Swin-GradCAM": 0.8, "Swin-HGI-SAM": 0.06}
-        # best_thresholds = {"SwinSAM-binary": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["SwinSAM-binary"], "SwinSAM-binary", device),
-        #                    "SwinSAM-multi": find_best_threshold(np.arange(0.07, 0.15, 0.01), val_ds, models["SwinSAM-multi"], "SwinSAM-multi", device),
-        #                    "Swin-GradCAM": find_best_threshold(np.arange(0.5, 1, 0.1), val_ds, models["Swin-GradCAM"], "Swin-GradCAM", device),
-        #                    "Swin-HGI-SAM": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
+        # best_thresholds = {"SwinSAM-binary": 0.06, "SwinSAM-multi": 0.1, "Swin-GradCAM": 0.8, "Swin-HGI-SAM": 0.06}
+        best_thresholds = {"SwinSAM-binary": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["SwinSAM-binary"], "SwinSAM-binary", device),
+                           "SwinSAM-multi": find_best_threshold(np.arange(0.07, 0.15, 0.01), val_ds, models["SwinSAM-multi"], "SwinSAM-multi", device),
+                           "Swin-GradCAM": find_best_threshold(np.arange(0.4, 1, 0.1), val_ds, models["Swin-GradCAM"], "Swin-GradCAM", device),
+                           "Swin-HGI-SAM": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
 
         confusion_matrices = {"SwinSAM-binary": ConfusionMatrix(), "SwinSAM-multi": ConfusionMatrix(),
                               "Swin-HGI-SAM": ConfusionMatrix(), "UNet": ConfusionMatrix()}
@@ -183,8 +183,7 @@ def main():
             for model_name, metric in metric_models.items():
                 buffer = metric.get_buffer()
                 seg_results[f'{metric_name}_{model_name}'].extend(list(buffer.view(-1).cpu().numpy()))
-                std_mean = torch.std_mean(buffer)
-                print(f'{model_name}={std_mean[1]:.3f} +/- {std_mean[0]:.3f}', end='\t')
+                print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer.cpu().numpy()):.3f}', end='\t')
             print()
 
     seg_results_df = pd.DataFrame(seg_results)
@@ -196,7 +195,7 @@ def main():
         print(f'{metric_name}:', end='\t')
         for model_name, metric in metric_models.items():
             buffer = torch.tensor(seg_results[f'{metric_name}_{model_name}'])
-            print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer.numpy()):.3f}', end='\t')
+            print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer.cpu().numpy()):.3f}', end='\t')
         print()
 
 

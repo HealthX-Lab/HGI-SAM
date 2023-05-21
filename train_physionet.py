@@ -67,7 +67,8 @@ def main():
         if model_name == "UNet":
             model = UNet(in_ch=in_ch, num_classes=num_classes, embed_dims=embed_dims)
         else:
-            model = monai.networks.nets.SwinUNETR(img_size=(384, 384), in_channels=in_ch, out_channels=num_classes, spatial_dims=2)
+            model = monai.networks.nets.SwinUNETR(img_size=(384, 384), in_channels=in_ch, out_channels=num_classes, spatial_dims=2,
+                                                  depths=(2, 2, 2, 2), num_heads=(2, 4, 8, 16), feature_size=12)
         # we use a combo loss to overcome to problem of imbalanced foreground/background pixels.
         loss_fn = DiceCELoss()
         checkpoint_name = model.__class__.__name__ + "-" + loss_fn.__class__.__name__

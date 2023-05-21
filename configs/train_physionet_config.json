@@ -1,5 +1,5 @@
 {
-  "model_name": "UNet",
+  "model_name": "SwinUNETR",
   "in_ch": 3,
   "num_classes": 2,
 

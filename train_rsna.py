@@ -35,7 +35,6 @@ def main():
     data_path = config_dict["data_path"]
     extra_path = config_dict["extra_path"]
 
-    img_size = config_dict["img_size"]
     in_ch = config_dict["in_ch"]
     num_classes = config_dict["num_classes"]
 
@@ -64,14 +63,16 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label, sampler=train_sampler)
     valid_loader = DataLoader(validation_ds, batch_size=batch_size, num_workers=num_workers, collate_fn=rsna_collate_binary_label)
 
-    model = SwinWeak(in_ch, num_classes)
+    model = SwinWeak(in_ch, num_classes, pretrained=False if do_finetune else True)
     loss_fn = nn.CrossEntropyLoss()
     checkpoint_name = model.__class__.__name__ + "_" + loss_fn.__class__.__name__
     num_params = sum(p.numel() for p in model.parameters()) / 1e6
     print("model: ", checkpoint_name, " num-params:", num_params)
 
     if do_finetune:
-        load_model(model.swin, os.path.join(extra_path, 'weights/swin_binary_trained.pth'))
+        mlcn_binary_model = SwinWeak(in_ch, 1, pretrained=False)
+        load_model(mlcn_binary_model, os.path.join(extra_path, 'weights/backup/SwinWeak_FocalBinaryCrossEntropyLoss-binary.pth'))
+        model.swin.load_state_dict(mlcn_binary_model.swin.state_dict())
         for param in model.swin.parameters():
             param.requires_grad = False
         opt = AdamW(model.head.parameters(), lr=1e-3, weight_decay=1e-6)

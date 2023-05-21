@@ -14,6 +14,7 @@ import cv2
 import argparse
 import json
 from monai.networks.nets import SwinUNETR
+from scipy.stats import sem
 
 
 def main():
@@ -191,8 +192,9 @@ def main():
             print(f'{metric_name}:', end='\t')
             for model_name, metric in metric_models.items():
                 buffer = metric.get_buffer()
-                seg_results[f'{metric_name}_{model_name}'].extend(list(buffer.view(-1).cpu().numpy()))
-                print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer.cpu().numpy()):.3f}', end='\t')
+                buffer_np = buffer.cpu().numpy()
+                seg_results[f'{metric_name}_{model_name}'].extend(list(buffer_np))
+                print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer_np):.3f} ({sem(buffer_np, nan_policy="omit")})', end='\t')
             print()
 
     seg_results_df = pd.DataFrame(seg_results)
@@ -205,8 +207,9 @@ def main():
     for metric_name, metric_models in seg_metrics.items():
         print(f'{metric_name}:', end='\t')
         for model_name, metric in metric_models.items():
-            buffer = torch.tensor(seg_results[f'{metric_name}_{model_name}'])
-            print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer.cpu().numpy()):.3f}', end='\t')
+            buffer_np = np.array(seg_results[f'{metric_name}_{model_name}'])
+            buffer = torch.tensor(buffer_np)
+            print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer_np):.3f} ({sem(buffer_np, nan_policy="omit")})', end='\t')
         print()
 
 

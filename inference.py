@@ -66,7 +66,8 @@ def main():
                   "Swin-GradCAM": SwinWeak(in_ch=3, num_classes=2, pretrained=False),
                   "Swin-HGI-SAM": SwinWeak(in_ch=3, num_classes=2, pretrained=False),
                   "UNet": UNet(in_ch=3, num_classes=2, embed_dims=[24, 48, 96, 192]),
-                  "SwinUNETR": SwinUNETR(img_size=(384, 384), in_channels=3, out_channels=2, spatial_dims=2)}
+                  "SwinUNETR": SwinUNETR(img_size=(384, 384), in_channels=3, out_channels=2, spatial_dims=2,
+                                         depths=(2, 2, 2, 2), num_heads=(2, 4, 8, 16), feature_size=12)}
 
         for model_name, model in models.items():
             # only for UNet and SwinUNETR models, we have to load the weight corresponding to the fold
@@ -95,11 +96,16 @@ def main():
                        }
 
         # thresholds for prediction mask binarization. Uncomment bellow for actual grid-search (slow)
-        # best_thresholds = {"SwinSAM-binary": 0.06, "SwinSAM-multi": 0.1, "Swin-GradCAM": 0.8, "Swin-HGI-SAM": 0.06}
-        best_thresholds = {"SwinSAM-binary": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["SwinSAM-binary"], "SwinSAM-binary", device),
-                           "SwinSAM-multi": find_best_threshold(np.arange(0.07, 0.15, 0.01), val_ds, models["SwinSAM-multi"], "SwinSAM-multi", device),
-                           "Swin-GradCAM": find_best_threshold(np.arange(0.4, 1, 0.1), val_ds, models["Swin-GradCAM"], "Swin-GradCAM", device),
-                           "Swin-HGI-SAM": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
+        # best_thresholds = {"SwinSAM-binary": 0.07, "SwinSAM-multi": 0.11, "Swin-GradCAM": 0.8, "Swin-HGI-SAM": 0.05}
+        best_thresholds = {"SwinSAM-binary": find_best_threshold(np.arange(0.01, 1, 0.02), val_ds, models["SwinSAM-binary"], "SwinSAM-binary", device),
+                           "SwinSAM-multi": find_best_threshold(np.arange(0.01, 1, 0.02), val_ds, models["SwinSAM-multi"], "SwinSAM-multi", device),
+                           "Swin-GradCAM": find_best_threshold(np.arange(0.1, 1, 0.1), val_ds, models["Swin-GradCAM"], "Swin-GradCAM", device),
+                           "Swin-HGI-SAM": find_best_threshold(np.arange(0.01, 1, 0.02), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
+
+        print("Best thresholds:", end=' ')
+        for model_name, best_th in best_thresholds.items():
+            print(f'{model_name}={best_th}', end='\t')
+        print()
 
         confusion_matrices = {"SwinSAM-binary": ConfusionMatrix(), "SwinSAM-multi": ConfusionMatrix(),
                               "Swin-HGI-SAM": ConfusionMatrix(), "UNet": ConfusionMatrix(), "SwinUNETR": ConfusionMatrix()}
@@ -138,10 +144,11 @@ def main():
                 # computing all prediction masks
                 hgi_foregrounds = logits["Swin-HGI-SAM"][:, 1].sum()
                 hgi_foregrounds.backward()
+                predmasks["Swin-HGI-SAM"] = models["Swin-HGI-SAM"].attentional_segmentation_grad(brain)
                 predmasks["SwinSAM-binary"] = models["SwinSAM-binary"].attentional_segmentation(brain)
                 predmasks["SwinSAM-multi"] = models["SwinSAM-multi"].attentional_segmentation(brain)
                 predmasks["Swin-GradCAM"] = models["Swin-GradCAM"].grad_cam_segmentation(x.unsqueeze(0), brain)
-                predmasks["Swin-HGI-SAM"] = models["Swin-HGI-SAM"].attentional_segmentation_grad(brain)
+
                 # binarization of predmasks
                 for model_name, predmask in predmasks.items():
                     if model_name in ["UNet", "SwinUNETR"]:
@@ -166,14 +173,14 @@ def main():
                     subdural_window = x[1].cpu().numpy()
                     bone_window = x[2].cpu().numpy()
                     # storing input image channels
-                    cv2.imwrite(os.path.join(sample_dir_path, "input_image.png"), input_image * 256)
-                    cv2.imwrite(os.path.join(sample_dir_path, "brain_window.png"), brain_window * 256)
-                    cv2.imwrite(os.path.join(sample_dir_path, "subdural_window.png"), subdural_window * 256)
-                    cv2.imwrite(os.path.join(sample_dir_path, "bone_window.png"), bone_window * 256)
+                    cv2.imwrite(os.path.join(sample_dir_path, "input_image.png"), input_image * 255)
+                    cv2.imwrite(os.path.join(sample_dir_path, "brain_window.png"), brain_window * 255)
+                    cv2.imwrite(os.path.join(sample_dir_path, "subdural_window.png"), subdural_window * 255)
+                    cv2.imwrite(os.path.join(sample_dir_path, "bone_window.png"), bone_window * 255)
                     # storing predicted segmentations along with ground truth
                     for model_name, predmask_onehot in predmasks_onehot.items():
                         save_segmentation_visualization(os.path.join(sample_dir_path, f"{model_name}.png"),
-                                                        brain_window, mask.cpu().numpy(), predmask_onehot[1].cpu().numpy())
+                                                        brain_window, mask_onehot[1].cpu().numpy(), predmask_onehot[1].cpu().numpy())
 
         # computing confusion matrices for detection metrics
         for cfm in confusion_matrices.values():
@@ -191,10 +198,10 @@ def main():
         for metric_name, metric_models in seg_metrics.items():
             print(f'{metric_name}:', end='\t')
             for model_name, metric in metric_models.items():
-                buffer = metric.get_buffer()
+                buffer = metric.get_buffer().view(-1)
                 buffer_np = buffer.cpu().numpy()
                 seg_results[f'{metric_name}_{model_name}'].extend(list(buffer_np))
-                print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer_np):.3f} ({sem(buffer_np, nan_policy="omit")})', end='\t')
+                print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer_np):.3f} ({sem(buffer_np, nan_policy="omit"):.3f})', end='\t')
             print()
 
     seg_results_df = pd.DataFrame(seg_results)
@@ -209,7 +216,7 @@ def main():
         for model_name, metric in metric_models.items():
             buffer_np = np.array(seg_results[f'{metric_name}_{model_name}'])
             buffer = torch.tensor(buffer_np)
-            print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer_np):.3f} ({sem(buffer_np, nan_policy="omit")})', end='\t')
+            print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer_np):.3f} ({sem(buffer_np, nan_policy="omit"):.3f})', end='\t')
         print()
 
 
@@ -232,6 +239,18 @@ def save_segmentation_visualization(path, brain_window, mask, predmask):
     out = color_brain + color_mask + color_pred
     out = (out - out.min()) / (out.max() - out.min()) * 256
     cv2.imwrite(path, out)
+    # brain_window = cv2.convertScaleAbs(brain_window, alpha=255)
+    # mask = cv2.convertScaleAbs(mask, alpha=255)
+    # predmask = cv2.convertScaleAbs(predmask, alpha=255)
+    #
+    # mask_contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    # pred_contours, _ = cv2.findContours(predmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    #
+    # color_brain = cv2.cvtColor(brain_window, cv2.COLOR_GRAY2BGR)
+    # cv2.drawContours(color_brain, mask_contours, -1, (0, 255, 0), 2)
+    # cv2.drawContours(color_brain, pred_contours, -1, (0, 0, 255), 2)
+    #
+    # cv2.imwrite(path, color_brain)
 
 
 def find_best_threshold(grid_range, val_ds, model, model_name, device='cuda'):

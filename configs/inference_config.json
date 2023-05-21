@@ -10,6 +10,6 @@
   "SwinUNETR_dir_path": "extra/weights/backup",
 
   "csv_seg_results_path": "extra/results/seg_results.csv",
-  "save_visualizations": "False",
+  "save_visualizations": "True",
   "save_visualizations_dir": "extra/segmentations"
 }

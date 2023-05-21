@@ -13,7 +13,7 @@ from torch.optim import AdamW
 from sklearn.model_selection import train_test_split
 from collections import Counter
 
-from helpers.preprocessing import Augmentation, get_transform
+from helpers.preprocessing import Augmentation
 from helpers.dataset import PhysioNetICHDataset, physio_collate_image_mask, physionet_cross_validation_split
 from models.unet import UNet
 from helpers.trainer import train
@@ -54,7 +54,7 @@ def main():
     physionet_cross_validation_split(data_path, extra_path, k=folds, override=False)
     # creating the physionet dataset.
     # brain and bone window parameters are derived from the dataset paper. Subdural window params is adapted based on RSNA one, and these two ds differences.
-    ds = PhysioNetICHDataset(data_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
+    ds = PhysioNetICHDataset(data_path, windows=[(80, 340), (700, 3200)])
     all_indices = np.arange(0, len(ds.labels))
     for cf in range(0, folds):
         # get the indices for train, validation and test sets.

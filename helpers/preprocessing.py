@@ -29,24 +29,6 @@ def window_image(image, window_params, intercept, slope, rescale=True):
     return torch.FloatTensor(image)
 
 
-def get_transform(image_size):
-    """
-    preprocessing transforms applied to image, which only includes resizing the image
-    to delete some parts of background, we resize it to 110% of needed size, and then we center crop the image
-
-    :param image_size: the size of image needed
-    :return: transformed image
-    """
-    def transform(tensor, interpolation='bilinear'):
-        if interpolation == 'nearest':
-            r = transforms.Resize(int(1.1 * image_size), interpolation=transforms.InterpolationMode.NEAREST)
-        else:
-            r = transforms.Resize(int(1.1 * image_size), interpolation=transforms.InterpolationMode.BILINEAR)
-        t = transforms.Compose([r, transforms.CenterCrop(image_size)])
-        return t(tensor)
-    return transform
-
-
 class Augmentation:
     def __init__(self, with_mask=False):
         """

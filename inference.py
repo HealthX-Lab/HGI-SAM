@@ -1,6 +1,5 @@
 import torch
 from helpers.dataset import *
-from helpers.preprocessing import get_transform
 from models.swin_weak import SwinWeak
 import cv2
 from helpers.utils import *
@@ -47,7 +46,7 @@ def main():
     else:
         device = 'cpu'
 
-    ds = PhysioNetICHDataset(data_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
+    ds = PhysioNetICHDataset(data_path, windows=[(80, 340), (700, 3200)])
     # dictionary holding segmentation results
     seg_results = {"dice_SwinSAM-binary": [], "dice_SwinSAM-multi": [], "dice_Swin-GradCAM": [], "dice_Swin-HGI-SAM": [], "dice_UNet": [], "dice_SwinUNETR": [],
                    "iou_SwinSAM-binary": [], "iou_SwinSAM-multi": [], "iou_Swin-GradCAM": [], "iou_Swin-HGI-SAM": [], "iou_UNet": [], "iou_SwinUNETR": []}

@@ -42,14 +42,13 @@ def main():
     t_x, t_y, v_x, v_y = rsna_train_valid_split(data_path, extra_path, validation_size=validation_ratio, override=False)
 
     windows = [(80, 200), (600, 2800)]  # window-center and window-width for windowing CT HF values into subdural and bone windows respectively.
-    transform = get_transform(img_size)
 
     augmentation = None
     if do_augmentation:
         augmentation = Augmentation(with_mask=False)
 
-    train_ds = RSNAICHDataset(data_path, t_x, t_y, windows=windows, transform=transform, augmentation=augmentation)
-    validation_ds = RSNAICHDataset(data_path, v_x, v_y, windows=windows, transform=transform)
+    train_ds = RSNAICHDataset(data_path, t_x, t_y, windows=windows, augmentation=augmentation)
+    validation_ds = RSNAICHDataset(data_path, v_x, v_y, windows=windows)
 
     train_sampler = None
     if do_sampling:

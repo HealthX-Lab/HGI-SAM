@@ -1,5 +1,6 @@
 import os
 import torchvision
+from torchvision import transforms
 from torch.utils.data import Dataset
 import torch
 from tqdm import tqdm
@@ -17,8 +18,7 @@ from helpers.preprocessing import window_image
 
 
 class RSNAICHDataset(Dataset):
-    def __init__(self, root_dir: str, filenames: [str], labels: np.array, windows: [(int, int)] = None,
-                 transform: torchvision.transforms.transforms.Compose = None, augmentation: Augmentation = None):
+    def __init__(self, root_dir: str, filenames: [str], labels: np.array, windows: [(int, int)] = None, augmentation: Augmentation = None):
         """
         Specific pytorch dataset designed for RSNA ICH dataset
 
@@ -26,14 +26,16 @@ class RSNAICHDataset(Dataset):
         :param filenames: list of filenames that is used in this dataset (helps in differentiating configs and validation sets)
         :param labels: array of labels corresponding to each filename in filenames
         :param windows: a list of (a, b) tuples whereas a: window-center, b: window-width
-        :param transform: transforms applied to the windowed image such is resizing
         :param augmentation: augmentations applied to the transformed image such is random affine transform
         """
         self.train_dir = os.path.join(root_dir, 'stage_2_train')
         self.filenames = filenames
         self.labels = labels
         self.windows = windows
-        self.transform = transform
+
+        image_size = 384
+        self.transform = transforms.Compose([transforms.Resize(int(1.1 * image_size), interpolation=transforms.InterpolationMode.BILINEAR),
+                                             transforms.CenterCrop(image_size)])
         self.augmentation = augmentation
 
     def __len__(self):
@@ -56,8 +58,8 @@ class RSNAICHDataset(Dataset):
         else:
             image = default_window
 
-        if self.transform is not None:
-            image = self.transform(image)
+        # Resize and Center Crop image
+        image = self.transform(image)
 
         if self.augmentation is not None:
             image = self.augmentation(image)
@@ -66,14 +68,13 @@ class RSNAICHDataset(Dataset):
 
 
 class PhysioNetICHDataset(Dataset):
-    def __init__(self, root_dir: str, windows: [(int, int)] = None, transform: torchvision.transforms.transforms.Compose = None):
+    def __init__(self, root_dir: str, windows: [(int, int)] = None):
         """
         Specific pytorch dataset designed for PhysioNet ICH dataset. Here, because the dataset is small and also in 3D,
         first, we read all 2D slices, and then, we process them.
 
         :param root_dir: path to the PhysioNet ICH root directory
         :param windows: a list of (a, b) tuples whereas a: window-center, b: window-width
-        :param transform: transforms applied to the windowed image such is resizing
         """
         self.scans_dir = os.path.join(root_dir, 'ct_scans')
         self.masks_dir = os.path.join(root_dir, 'masks')
@@ -86,7 +87,11 @@ class PhysioNetICHDataset(Dataset):
         self.masks = []  # a list containing hemorrhage-segmented-masks corresponding to each slice
         self.labels = []  # a list of hemorrhage-existence labels corresponding to each slice
 
-        self.transform = transform
+        image_size = 384
+        self.transform_image = transforms.Compose([transforms.Resize(int(1.1 * image_size), interpolation=transforms.InterpolationMode.BILINEAR),
+                                                   transforms.CenterCrop(image_size)])
+        self.transform_mask = transforms.Compose([transforms.Resize(int(1.1 * image_size), interpolation=transforms.InterpolationMode.NEAREST),
+                                                  transforms.CenterCrop(image_size)])
         self.windows = windows
 
         self.read_dataset()
@@ -114,7 +119,7 @@ class PhysioNetICHDataset(Dataset):
         for file in pbar:
             scan = _read_image_3d(os.path.join(self.scans_dir, file), do_rotate=True)
             mask = _read_image_3d(os.path.join(self.masks_dir, file), do_rotate=True)
-            mask = mask // 255  # map 0-255 to 0-1
+            mask = mask // 255  # map 0/255 to 0/1
             brain = _read_image_3d(os.path.join(self.brains_dir, f'{file.split(".")[0]}_mask.nii.gz'), do_rotate=True)
 
             num_slices = scan.shape[-1]
@@ -147,10 +152,10 @@ class PhysioNetICHDataset(Dataset):
         brain = brain.unsqueeze(0)
         mask = mask.unsqueeze(0)
 
-        if self.transform is not None:
-            image = self.transform(image)
-            brain = self.transform(brain, 'nearest')
-            mask = self.transform(mask, 'nearest')
+        # Resize and Center Crop images and mask
+        image = self.transform_image(image)
+        mask = self.transform_mask(mask)
+        brain = self.transform_mask(brain)
 
         return image, mask, brain, label
 

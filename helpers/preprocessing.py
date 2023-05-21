@@ -37,12 +37,14 @@ def get_transform(image_size):
     :param image_size: the size of image needed
     :return: transformed image
     """
-    t = transforms.Compose([
-        transforms.Resize(int(1.1 * image_size)),
-        transforms.CenterCrop(image_size)
-    ])
-
-    return t
+    def transform(tensor, interpolation='bilinear'):
+        if interpolation == 'nearest':
+            r = transforms.Resize(int(1.1 * image_size), interpolation=transforms.InterpolationMode.NEAREST)
+        else:
+            r = transforms.Resize(int(1.1 * image_size), interpolation=transforms.InterpolationMode.BILINEAR)
+        t = transforms.Compose([r, transforms.CenterCrop(image_size)])
+        return t(tensor)
+    return transform
 
 
 class Augmentation:
@@ -53,9 +55,10 @@ class Augmentation:
         :param with_mask: whether to apply the transforms on images masks as well.
         """
         keys = ['image', 'mask'] if with_mask else ['image']
+        mode = ['bilinear', 'nearest'] if with_mask else 'bilinear'
         self.augmentation = Compose([
             RandFlipD(prob=0.5, spatial_axis=1, keys=keys),
-            RandAffineD(prob=0.5, rotate_range=(deg2rad(45), deg2rad(45)), translate_range=(0.1, 0.1), scale_range=(0.1, 0.1), padding_mode='zeros', keys=keys),
+            RandAffineD(prob=0.5, rotate_range=(deg2rad(45), deg2rad(45)), translate_range=(0.1, 0.1), scale_range=(0.1, 0.1), padding_mode='zeros', mode=mode, keys=keys),
             RandGaussianNoiseD(prob=0.5, keys=['image'])
         ])
 

@@ -1,3 +1,4 @@
+import torch
 from helpers.dataset import *
 from helpers.preprocessing import get_transform
 from models.swin_weak import SwinWeak
@@ -13,6 +14,7 @@ import pandas as pd
 import cv2
 import argparse
 import json
+from monai.networks.nets import SwinUNETR
 
 
 def main():
@@ -31,7 +33,8 @@ def main():
                       "SwinSAM-multi": config_dict["SwinSAM-multi_path"],
                       "Swin-GradCAM": config_dict["Swin-GradCAM_path"],
                       "Swin-HGI-SAM": config_dict["Swin-HGI-SAM_path"],
-                      "UNet": config_dict["UNet_dir_path"]}
+                      "UNet": config_dict["UNet_dir_path"],
+                      "SwinUNETR": config_dict["SwinUNETR_dir_path"]}
 
     csv_seg_results_path = config_dict["csv_seg_results_path"]
     save_visualizations = str_to_bool(config_dict["save_visualizations"])
@@ -46,8 +49,8 @@ def main():
 
     ds = PhysioNetICHDataset(data_path, windows=[(80, 340), (700, 3200)], transform=get_transform(384))
     # dictionary holding segmentation results
-    seg_results = {"dice_SwinSAM-binary": [], "dice_SwinSAM-multi": [], "dice_Swin-GradCAM": [], "dice_Swin-HGI-SAM": [], "dice_UNet": [],
-                   "iou_SwinSAM-binary": [], "iou_SwinSAM-multi": [], "iou_Swin-GradCAM": [], "iou_Swin-HGI-SAM": [], "iou_UNet": []}
+    seg_results = {"dice_SwinSAM-binary": [], "dice_SwinSAM-multi": [], "dice_Swin-GradCAM": [], "dice_Swin-HGI-SAM": [], "dice_UNet": [], "dice_SwinUNETR": [],
+                   "iou_SwinSAM-binary": [], "iou_SwinSAM-multi": [], "iou_Swin-GradCAM": [], "iou_Swin-HGI-SAM": [], "iou_UNet": [], "iou_SwinUNETR": []}
 
     # iterating over folds
     for fold_number in [0, 1, 2, 3, 4]:
@@ -62,13 +65,14 @@ def main():
                   # in following, we use softmax + argmax to do binary classification,
                   "Swin-GradCAM": SwinWeak(in_ch=3, num_classes=2, pretrained=False),
                   "Swin-HGI-SAM": SwinWeak(in_ch=3, num_classes=2, pretrained=False),
-                  "UNet": UNet(in_ch=3, num_classes=2, embed_dims=[24, 48, 96, 192])}
+                  "UNet": UNet(in_ch=3, num_classes=2, embed_dims=[24, 48, 96, 192]),
+                  "SwinUNETR": SwinUNETR(img_size=(384, 384), in_channels=3, out_channels=2, spatial_dims=2)}
 
         for model_name, model in models.items():
-            # only for UNet model, we have to load the weight corresponding to the fold
+            # only for UNet and SwinUNETR models, we have to load the weight corresponding to the fold
             # thus, the path in the config file for UNet model is the path to the directory that contains the weights
-            if model_name == "UNet":
-                load_model(model, os.path.join(models_weights[model_name], f"UNet-DiceCELoss-fold{fold_number}.pt"))
+            if model_name in ["UNet", "SwinUNETR"]:
+                load_model(model, os.path.join(models_weights[model_name], f"{model_name}-DiceCELoss-fold{fold_number}.pth"))
             # for weak models that are trained on a separate dataset, we use the same weights to test different folds
             # thus, the path in the file for those models are the path to the corresponding file
             else:
@@ -80,12 +84,14 @@ def main():
                                 "SwinSAM-multi": DiceMetric(include_background=False, reduction='none'),
                                 "Swin-GradCAM": DiceMetric(include_background=False, reduction='none'),
                                 "Swin-HGI-SAM": DiceMetric(include_background=False, reduction='none'),
-                                "UNet": DiceMetric(include_background=False, reduction='none')},
+                                "UNet": DiceMetric(include_background=False, reduction='none'),
+                                "SwinUNETR": DiceMetric(include_background=False, reduction='none')},
                        "iou":  {"SwinSAM-binary": MeanIoU(include_background=False, reduction='none'),
                                 "SwinSAM-multi": MeanIoU(include_background=False, reduction='none'),
                                 "Swin-GradCAM": MeanIoU(include_background=False, reduction='none'),
                                 "Swin-HGI-SAM": MeanIoU(include_background=False, reduction='none'),
-                                "UNet": MeanIoU(include_background=False, reduction='none')}
+                                "UNet": MeanIoU(include_background=False, reduction='none'),
+                                "SwinUNETR": MeanIoU(include_background=False, reduction='none')}
                        }
 
         # thresholds for prediction mask binarization. Uncomment bellow for actual grid-search (slow)
@@ -96,7 +102,7 @@ def main():
                            "Swin-HGI-SAM": find_best_threshold(np.arange(0.03, 0.15, 0.01), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
 
         confusion_matrices = {"SwinSAM-binary": ConfusionMatrix(), "SwinSAM-multi": ConfusionMatrix(),
-                              "Swin-HGI-SAM": ConfusionMatrix(), "UNet": ConfusionMatrix()}
+                              "Swin-HGI-SAM": ConfusionMatrix(), "UNet": ConfusionMatrix(), "SwinUNETR": ConfusionMatrix()}
 
         pbar_test = tqdm(enumerate(test_ds), total=len(test_ds), leave=False)
         pbar_test.set_description(f'testing fold: {fold_number}')
@@ -113,14 +119,18 @@ def main():
             predmask_unet = torch.argmax(torch.softmax(logits["UNet"], dim=1), dim=1)
             pred_unet = torch.Tensor([1]) if predmask_unet.sum() > 10 else torch.Tensor([0])
             pred_unet = pred_unet.to(device)
+            predmask_swinunetr = torch.argmax(torch.softmax(logits["SwinUNETR"], dim=1), dim=1)
+            pred_swinunetr = torch.Tensor([1]) if predmask_swinunetr.sum() > 10 else torch.Tensor([0])
+            pred_swinunetr = pred_swinunetr.to(device)
 
             confusion_matrices["SwinSAM-binary"].add_prediction(pred_swin_sam_binary, y[-1:])
             confusion_matrices["SwinSAM-multi"].add_prediction(pred_swin_sam_multi[-1:], y[-1:])
             confusion_matrices["Swin-HGI-SAM"].add_prediction(pred_swin_hgi_sam, y[-1:])
             confusion_matrices["UNet"].add_prediction(pred_unet, y[-1:])
+            confusion_matrices["SwinUNETR"].add_prediction(pred_swinunetr, y[-1:])
 
             # measuring segmentation metrics only for slices that have a mask
-            predmasks = {"UNet": predmask_unet}
+            predmasks = {"UNet": predmask_unet, "SwinUNETR": predmask_swinunetr}
             predmasks_onehot = {}
             if y[-1] == 1:
                 mask_onehot = to_onehot(mask)
@@ -134,7 +144,7 @@ def main():
                 predmasks["Swin-HGI-SAM"] = models["Swin-HGI-SAM"].attentional_segmentation_grad(brain)
                 # binarization of predmasks
                 for model_name, predmask in predmasks.items():
-                    if model_name == "UNet":
+                    if model_name in ["UNet", "SwinUNETR"]:
                         predmask_binary = predmasks[model_name]
                     else:
                         predmask_binary = binarization_simple_thresholding(deepcopy(predmasks[model_name]), best_thresholds[model_name])
@@ -187,6 +197,8 @@ def main():
             print()
 
     seg_results_df = pd.DataFrame(seg_results)
+    if os.path.isfile(csv_seg_results_path):
+        os.remove(csv_seg_results_path)
     seg_results_df.to_csv(csv_seg_results_path)
 
     print('\n', 20 * '#')

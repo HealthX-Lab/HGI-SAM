@@ -7,6 +7,7 @@
   "Swin-GradCAM_path": "extra/weights/backup/SwinWeak_CrossEntropyLoss.pth",
   "Swin-HGI-SAM_path": "extra/weights/backup/SwinWeak_CrossEntropyLoss.pth",
   "UNet_dir_path": "extra/weights/backup",
+  "SwinUNETR_dir_path": "extra/weights/backup",
 
   "csv_seg_results_path": "extra/results/seg_results.csv",
   "save_visualizations": "False",

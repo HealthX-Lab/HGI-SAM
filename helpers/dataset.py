@@ -114,6 +114,7 @@ class PhysioNetICHDataset(Dataset):
         for file in pbar:
             scan = _read_image_3d(os.path.join(self.scans_dir, file), do_rotate=True)
             mask = _read_image_3d(os.path.join(self.masks_dir, file), do_rotate=True)
+            mask = mask // 255  # map 0-255 to 0-1
             brain = _read_image_3d(os.path.join(self.brains_dir, f'{file.split(".")[0]}_mask.nii.gz'), do_rotate=True)
 
             num_slices = scan.shape[-1]
@@ -135,9 +136,6 @@ class PhysioNetICHDataset(Dataset):
         brain = self.brains[item]
         label = torch.LongTensor(self.labels[item])
 
-        if mask.max() > 0:  # 0-1 normalization
-            mask = (mask - mask.min()) / (mask.max() - mask.min())
-
         # based on PhysioNet documentations, we consider window-center=40 and window-width=120 as the default brain-window parameters
         default_window = _get_image_windows(image, [(40, 120)], 0, 1)
         if self.windows is not None:  # adding other windows such as bone-window and subdural-window
@@ -145,16 +143,14 @@ class PhysioNetICHDataset(Dataset):
         else:
             image = default_window
 
-        # binarization of ground-truth mask
-        mask[mask > 0] = 1
         # adding intensity channel to the binary brain-mask and mask
         brain = brain.unsqueeze(0)
         mask = mask.unsqueeze(0)
 
         if self.transform is not None:
             image = self.transform(image)
-            brain = self.transform(brain)
-            mask = self.transform(mask)
+            brain = self.transform(brain, 'nearest')
+            mask = self.transform(mask, 'nearest')
 
         return image, mask, brain, label
 

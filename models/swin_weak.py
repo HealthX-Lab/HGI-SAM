@@ -68,18 +68,18 @@ class SwinWeak(nn.Module):
         mask = (mask - mask.min()) / (mask.max() - mask.min())  # 0-1 normalization of segmentation mask
         return mask
 
-    def grad_cam_segmentation(self, x, brain):
+    def grad_cam_segmentation(self, x, brainmask):
         """
         Swin-GradCAM: weak segmentation mask generation that uses GradCAM technique
 
         :param x: input image
-        :param brain: brain-mask used to mask out predictions overlapping background and skull
+        :param brainmask: brain-mask used to mask out predictions overlapping background and skull
         :return: segmentation map
         """
         # defining the last block norm layer as the GradCAM target layer
         gcam_layer = GradCAM(model=self, target_layers=[self.swin.layers[-1].blocks[-1].norm1], use_cuda=True, reshape_transform=reshape_transform)
-        gcam_map = torch.tensor(gcam_layer(x), device=brain.device, dtype=brain.dtype)
-        gcam_map *= brain
+        gcam_map = torch.tensor(gcam_layer(x), device=brainmask.device, dtype=brainmask.dtype)
+        gcam_map *= brainmask
 
         gcam_map = (gcam_map - gcam_map.min()) / (gcam_map.max() - gcam_map.min())  # 0-1 normalization of segmentation mask
         return gcam_map

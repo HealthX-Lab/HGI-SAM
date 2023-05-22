@@ -57,7 +57,7 @@ class UNet(nn.Module):
 class ConvBlock(nn.Module):
     def __init__(self, in_ch, out_ch, kernel_size):
         """
-        A helper class for UNet model which is composed of 2 consecutive convolutional layers with GELU activation and Instance normalization
+        A helper class for UNet model which is composed of 2 consecutive convolutional layers with ReLU activation
 
         :param in_ch: number of input channels
         :param out_ch: number of output channels
@@ -65,11 +65,9 @@ class ConvBlock(nn.Module):
         """
         super().__init__()
         self.block = nn.Sequential(nn.Conv2d(in_ch, out_ch, kernel_size, padding='same'),
-                                   nn.GELU(),
-                                   nn.InstanceNorm2d(num_features=out_ch),
+                                   nn.ReLU(),
                                    nn.Conv2d(out_ch, out_ch, kernel_size, padding='same'),
-                                   nn.GELU(),
-                                   nn.InstanceNorm2d(num_features=out_ch))
+                                   nn.ReLU())
 
     def forward(self, x):
         return self.block(x)

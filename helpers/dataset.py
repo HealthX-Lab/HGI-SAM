@@ -205,7 +205,7 @@ def rsna_collate_binary_label(batch):
     return [data, target]
 
 
-def rsna_train_valid_split(root_dir: str, extra_path: str, validation_size=0.1, random_state=42, override=False):
+def rsna_train_valid_split(root_dir: str, extra_path: str, validation_size=0.1, override=False):
     """
     a method that splits the RSNA ICH 2D dicom dataset into configs and validation set randomly.
     we save the split into files for faster computation and further requirements
@@ -213,7 +213,6 @@ def rsna_train_valid_split(root_dir: str, extra_path: str, validation_size=0.1, 
     :param root_dir: path to the RSNA ICH dataset root directory
     :param extra_path: path to the extra directory which contains split files
     :param validation_size: proportion of validation set
-    :param random_state: the random state for splitting
     :param override: whether to compute the split again and rewrite filenames
     :return: filenames and corresponding labels for configs and validation sets.
     """
@@ -251,7 +250,7 @@ def rsna_train_valid_split(root_dir: str, extra_path: str, validation_size=0.1, 
     labels = np.array(labels)
 
     # configs-validation split
-    train_filenames, validation_filenames, train_labels, validation_labels = train_test_split(total_filenames, labels, test_size=validation_size, random_state=random_state, stratify=labels)
+    train_filenames, validation_filenames, train_labels, validation_labels = train_test_split(total_filenames, labels, test_size=validation_size, stratify=labels)
 
     #  saving configs and validation splits filenames and labels into files
     with open(train_file_split_path, "wb") as tf, open(train_label_split_path, "wb") as tl, open(validation_file_split_path, "wb") as vf, open(validation_label_split_path, "wb") as vl:

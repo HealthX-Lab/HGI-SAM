@@ -95,7 +95,7 @@ def main():
         else:
             # if sampling is not requested, we do normal batching.
             train_ds = Subset(ds, train_indices)
-            train_loader = DataLoader(train_ds, batch_size=batch_size, collate_fn=physio_collate_image_mask, num_workers=num_workers, shuffle=True)
+            train_loader = DataLoader(train_ds, batch_size=batch_size, collate_fn=physio_collate_image_mask, num_workers=num_workers)
         valid_ds = Subset(ds, valid_indices)
         valid_loader = DataLoader(valid_ds, batch_size=batch_size, collate_fn=physio_collate_image_mask)
 
@@ -103,9 +103,9 @@ def main():
         early_stopping = EarlyStopping(model, 3, os.path.join(extra_path, "weights", f"{checkpoint_name}-fold{cf}.pth"))
         print(f"training model: {checkpoint_name}")
 
-        train(early_stopping, epochs, model, opt, loss_fn, train_loader, valid_loader, augmentation=augmentation,
+        train(early_stopping, 1, model, opt, loss_fn, train_loader, valid_loader, augmentation=augmentation,
               result_plot_path=os.path.join(extra_path, 'plots', f'train_model_{checkpoint_name}-fold{cf}'))
-        del model
+        del model, opt, early_stopping, loss_fn
         torch.cuda.empty_cache()
 
 

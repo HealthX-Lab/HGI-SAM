@@ -11,7 +11,6 @@ import csv
 import pydicom
 from torchvision.transforms.functional import rotate
 from sklearn.model_selection import StratifiedKFold, train_test_split
-from sklearn.preprocessing import LabelEncoder
 
 from helpers.preprocessing import Augmentation
 from helpers.preprocessing import window_image
@@ -83,6 +82,8 @@ class PhysioNetICHDataset(Dataset):
         self.filenames = os.listdir(self.scans_dir)  # list of 3d nifty images
 
         self.slices = []  # a list containing 2D slices of the scan
+        self.scans_slices_indices = []
+        self.scans_num_slices_with_hemorrhages = []
         self.brains = []  # a list containing brain-masks corresponding to each slice
         self.masks = []  # a list containing hemorrhage-segmented-masks corresponding to each slice
         self.labels = []  # a list of hemorrhage-existence labels corresponding to each slice
@@ -114,6 +115,7 @@ class PhysioNetICHDataset(Dataset):
         self.labels = np.array(self.labels)
 
         # reading 3D scans, masks, and brain-masks and storing their 2D slices into lists
+        index = 0
         pbar = tqdm(self.filenames, total=len(self.filenames))
         pbar.set_description("reading physionet dataset")
         for file in pbar:
@@ -123,11 +125,15 @@ class PhysioNetICHDataset(Dataset):
             brain = _read_image_3d(os.path.join(self.brains_dir, f'{file.split(".")[0]}_mask.nii.gz'), do_rotate=True)
 
             num_slices = scan.shape[-1]
-
+            self.scans_slices_indices.append(np.arange(index, index + num_slices))
+            self.scans_num_slices_with_hemorrhages.append(self.labels[index:index+num_slices, -1].sum())
+            index = index + num_slices
             for i in range(num_slices):
                 self.slices.append(scan[:, :, i])
                 self.masks.append(mask[:, :, i])
                 self.brains.append(brain[:, :, i])
+
+        self.scans_num_slices_with_hemorrhages = np.array(self.scans_num_slices_with_hemorrhages)
 
     def __len__(self):
         return len(self.slices)
@@ -342,10 +348,12 @@ def physionet_cross_validation_split(physio_path, extra_path, k=5, override=Fals
             return
     ds = PhysioNetICHDataset(physio_path)
 
-    indices = np.arange(0, len(ds.labels))
-    # dividing into train/test based on all subtypes
-    encoded_labels = LabelEncoder().fit_transform([''.join(str(_l)) for _l in ds.labels])
+    indices = np.arange(0, len(ds.scans_slices_indices))
     skf = StratifiedKFold(k)
-    for cf, (train_valid_indices, test_indices) in enumerate(skf.split(indices, encoded_labels)):
+    # dividing into train/test based on how many slices with hemorrhage each scan have
+    for cf, (scan_train_valid_indices, scan_test_indices) in enumerate(skf.split(indices, ds.scans_num_slices_with_hemorrhages)):
+        test_indices = []
+        for scan_index in scan_test_indices:
+            test_indices.extend(list(ds.scans_slices_indices[scan_index]))
         with open(os.path.join(extra_path, 'folds_division', f"fold{cf}.pt"), 'wb') as fold_indices_file:
             pickle.dump(test_indices, fold_indices_file)

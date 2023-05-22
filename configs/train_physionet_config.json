@@ -1,10 +1,10 @@
 {
-  "model_name": "SwinUNETR",
+  "model_name": "UNet",
   "in_ch": 3,
   "num_classes": 2,
 
   "epochs": -1,
-  "batch_size": 16,
+  "batch_size": 12,
   "num_workers": 4,
   "lr": 0.001,
   "do_augmentation": "True",

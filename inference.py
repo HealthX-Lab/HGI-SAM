@@ -96,11 +96,11 @@ def main():
                        }
 
         # thresholds for prediction mask binarization. Uncomment bellow for actual grid-search (slow)
-        # best_thresholds = {"SwinSAM-binary": 0.07, "SwinSAM-multi": 0.11, "Swin-GradCAM": 0.8, "Swin-HGI-SAM": 0.05}
-        best_thresholds = {"SwinSAM-binary": find_best_threshold(np.arange(0.01, 1, 0.02), val_ds, models["SwinSAM-binary"], "SwinSAM-binary", device),
-                           "SwinSAM-multi": find_best_threshold(np.arange(0.01, 1, 0.02), val_ds, models["SwinSAM-multi"], "SwinSAM-multi", device),
-                           "Swin-GradCAM": find_best_threshold(np.arange(0.1, 1, 0.1), val_ds, models["Swin-GradCAM"], "Swin-GradCAM", device),
-                           "Swin-HGI-SAM": find_best_threshold(np.arange(0.01, 1, 0.02), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
+        best_thresholds = {"SwinSAM-binary": 0.07, "SwinSAM-multi": 0.11, "Swin-GradCAM": 0.8, "Swin-HGI-SAM": 0.05}
+        # best_thresholds = {"SwinSAM-binary": find_best_threshold(np.arange(0.01, 1, 0.02), val_ds, models["SwinSAM-binary"], "SwinSAM-binary", device),
+        #                    "SwinSAM-multi": find_best_threshold(np.arange(0.01, 1, 0.02), val_ds, models["SwinSAM-multi"], "SwinSAM-multi", device),
+        #                    "Swin-GradCAM": find_best_threshold(np.arange(0.1, 1, 0.1), val_ds, models["Swin-GradCAM"], "Swin-GradCAM", device),
+        #                    "Swin-HGI-SAM": find_best_threshold(np.arange(0.01, 1, 0.02), val_ds, models["Swin-HGI-SAM"], "Swin-HGI-SAM", device)}
 
         print("Best thresholds:", end=' ')
         for model_name, best_th in best_thresholds.items():
@@ -204,11 +204,6 @@ def main():
                 print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer_np):.3f} ({sem(buffer_np, nan_policy="omit"):.3f})', end='\t')
             print()
 
-    seg_results_df = pd.DataFrame(seg_results)
-    if os.path.isfile(csv_seg_results_path):
-        os.remove(csv_seg_results_path)
-    seg_results_df.to_csv(csv_seg_results_path)
-
     print('\n', 20 * '#')
     print('Overall subject-based segmentation results:')
     for metric_name, metric_models in seg_metrics.items():
@@ -218,6 +213,12 @@ def main():
             buffer = torch.tensor(buffer_np)
             print(f'{model_name}={torch.nanmean(buffer):.3f} +/- {np.nanstd(buffer_np):.3f} ({sem(buffer_np, nan_policy="omit"):.3f})', end='\t')
         print()
+
+    # writing results to the file
+    seg_results_df = pd.DataFrame(seg_results)
+    if os.path.isfile(csv_seg_results_path):
+        os.remove(csv_seg_results_path)
+    seg_results_df.to_csv(csv_seg_results_path)
 
 
 def save_segmentation_visualization(path, brain_window, mask, predmask):

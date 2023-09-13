@@ -1,8 +1,8 @@
 # HGI-SAM
 
 <p>
-    <img src="https://github.com/ah-rasoulian/HGI-SAM/blob/master/extra/images/model.png"  alt="model"/>
-    <img src="https://github.com/ah-rasoulian/HGI-SAM/blob/master/extra/images/attention_map_generation.png" alt="attention_map_generation"/>
+    <img src="https://github.com/ah-rasoulian/HGI-SAM/blob/main/extra/images/model.png"  alt="model"/>
+    <img src="https://github.com/ah-rasoulian/HGI-SAM/blob/main/extra/images/attention_map_generation.png" alt="attention_map_generation"/>
 </p>
 
 This repository contains the code used for the paper: [Weakly Supervised Intracranial Hemorrhage Segmentation using Head-Wise Gradient-Infused Self-Attention Maps from a Swin Transformer in Categorical Learning.](https://arxiv.org/abs/2304.04902)
